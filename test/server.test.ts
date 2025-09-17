@@ -1,9 +1,8 @@
 "use strict";
 
-const assert = require("assert");
-const net = require("net");
-
-const MqttServer = require("..");
+import * as assert from "assert";
+import * as net from "net";
+import { MqttServer, ServerConfig } from "../index";
 
 describe("MQTT Server", () => {
     it("should create and start basic TCP server", async () => {
@@ -14,6 +13,9 @@ describe("MQTT Server", () => {
 
         await server.start(config);
         assert.strictEqual(server.running, true);
+
+        // Give the server a moment to fully start listening
+        await new Promise(resolve => setTimeout(resolve, 100));
 
         // Test that the port is actually listening
         const isListening = await checkPortListening("127.0.0.1", 18830);
@@ -30,7 +32,7 @@ describe("MQTT Server", () => {
 
         // Test empty config
         await assert.rejects(
-            () => server.start({}),
+            () => server.start({} as ServerConfig),
             /Configuration must include at least one listener/
         );
 
@@ -40,7 +42,7 @@ describe("MQTT Server", () => {
                 listeners: [{
                     name: "test",
                     port: 1883,
-                    protocol: "invalid"
+                    protocol: "invalid" as any
                 }]
             }),
             /protocol must be one of: tcp, tls, ws, wss/
@@ -114,11 +116,11 @@ describe("MQTT Server", () => {
 
 /**
  * Helper function to check if a port is listening
- * @param {string} host 
- * @param {number} port 
- * @returns {Promise<boolean>}
+ * @param host - Host address to check
+ * @param port - Port number to check
+ * @returns Promise that resolves to true if port is listening
  */
-function checkPortListening(host, port) {
+function checkPortListening(host: string, port: number): Promise<boolean> {
     return new Promise((resolve) => {
         const socket = new net.Socket();
         

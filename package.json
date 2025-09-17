@@ -1,17 +1,25 @@
 {
-  "name": "mqtt-pubsub-adapter",
+  "name": "mqtt-server",
   "version": "0.1.0",
   "description": "High-performance MQTT server for Node.js built with Rust and Neon",
-  "main": "index.js",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
   "scripts": {
-    "build": "cargo-cp-artifact -nc index.node -- cargo build --message-format=json-render-diagnostics",
+    "build": "npm run build:native && npm run build:ts",
+    "build:native": "cargo-cp-artifact -nc dist/index.node -- cargo build --message-format=json-render-diagnostics",
+    "build:ts": "tsc",
     "install": "npm run build",
-    "test": "mocha test/**/*.test.js"
+    "test": "npm run build:ts && mocha dist/test/**/*.test.js",
+    "clean": "rm -rf dist",
+    "prepublishOnly": "npm run clean && npm run build"
   },
   "license": "MIT",
   "devDependencies": {
+    "@types/mocha": "^10.0.10",
+    "@types/node": "^20.19.16",
     "cargo-cp-artifact": "^0.1",
-    "mocha": "^10.0.0"
+    "mocha": "^10.0.0",
+    "typescript": "^5.9.2"
   },
   "repository": {
     "type": "git",
@@ -27,7 +35,8 @@
     "rmqtt",
     "iot",
     "websocket",
-    "tls"
+    "tls",
+    "typescript"
   ],
   "author": "splitbuddies",
   "bugs": {
@@ -38,8 +47,7 @@
     "node": ">=14.0.0"
   },
   "files": [
-    "index.js",
-    "index.node",
+    "dist/",
     "src/",
     "Cargo.toml",
     "README.md"

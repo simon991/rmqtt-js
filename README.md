@@ -1,4 +1,4 @@
-# MQTT PubSub Adapter
+# MQTT Server
 
 A high-performance MQTT server for Node.js built with Rust and Neon bindings. This package wraps the powerful [RMQTT](https://github.com/rmqtt/rmqtt) Rust library to provide an easy-to-use MQTT broker that can handle thousands of concurrent connections.
 
@@ -8,19 +8,39 @@ A high-performance MQTT server for Node.js built with Rust and Neon bindings. Th
 - **Multi-Protocol Support**: TCP, TLS, WebSocket, and WebSocket Secure (WSS)
 - **Multiple Listeners**: Support for binding multiple listeners simultaneously
 - **TLS Encryption**: Easy TLS configuration for secure connections
+- **TypeScript Support**: Full TypeScript definitions and type safety
 - **Lightweight**: Minimal overhead native bindings
-- **Simple API**: Clean JavaScript interface with Promise-based async operations
+- **Simple API**: Clean TypeScript/JavaScript interface with Promise-based async operations
 
 ## Installation
 
 ```bash
-npm install mqtt-pubsub-adapter
+npm install mqtt-server
 ```
 
 ## Quick Start
 
-```js
-const MqttServer = require("mqtt-pubsub-adapter");
+### TypeScript
+```typescript
+import { MqttServer } from "mqtt-server";
+
+(async () => {
+    const server = new MqttServer();
+    
+    // Create a basic TCP server on port 1883
+    const config = MqttServer.createBasicConfig(1883);
+    
+    await server.start(config);
+    console.log("MQTT server started on port 1883");
+    
+    // Server will run until stopped
+    // await server.stop();
+})();
+```
+
+### JavaScript
+```javascript
+const { MqttServer } = require("mqtt-server");
 
 (async () => {
     const server = new MqttServer();
@@ -38,21 +58,23 @@ const MqttServer = require("mqtt-pubsub-adapter");
 
 ## Multi-Protocol Example
 
-```js
-const MqttServer = require("mqtt-pubsub-adapter");
+```typescript
+import { MqttServer, MultiProtocolOptions } from "mqtt-server";
 
 (async () => {
     const server = new MqttServer();
     
     // Configure multiple protocols
-    const config = MqttServer.createMultiProtocolConfig({
+    const options: MultiProtocolOptions = {
         tcpPort: 1883,      // Standard MQTT
         tlsPort: 8883,      // Secure MQTT
         wsPort: 8080,       // MQTT over WebSocket
         wssPort: 8443,      // MQTT over Secure WebSocket
         tlsCert: "./server.pem",
         tlsKey: "./server.key"
-    });
+    };
+    
+    const config = MqttServer.createMultiProtocolConfig(options);
     
     await server.start(config);
     console.log("Multi-protocol MQTT server started");

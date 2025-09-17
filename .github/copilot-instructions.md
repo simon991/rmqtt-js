@@ -1,96 +1,121 @@
-# Copilot Instructions for MQTT PubSub Adapter
+# Copilot Instructions for MQTT Server
 
 ## Project Overview
 
-This is a **Neon.js hybrid Rust/JavaScript project** that wraps the high-performance RMQTT Rust MQTT server library for Node.js. The project provides a JavaScript API for creating and managing MQTT brokers with support for multiple protocols (TCP, TLS, WebSocket, WSS) and concurrent connections.
+This is a **Neon.js hybrid Rust/TypeScript project** that wraps the high-performance RMQTT Rust MQTT server library for Node.js. The project provides a TypeScript API for creating and managing MQTT brokers with support for multiple protocols (TCP, TLS, WebSocket, WSS) and concurrent connections.
 
 ## Architecture & Key Patterns
 
-### Rust-JavaScript Bridge Pattern
+### Rust-TypeScript Bridge Pattern
 - **Rust side**: `src/lib.rs` exports MQTT server functions via `#[neon::main]` using naming convention `mqtt_server_*`
-- **JavaScript side**: `index.js` wraps native functions in an idiomatic `MqttServer` class with lifecycle management
+- **TypeScript side**: `index.ts` wraps native functions in an idiomatic `MqttServer` class with full type safety
 - **Memory management**: Uses `JsBox<MqttServerWrapper>` to safely pass Rust server instances to JavaScript scope
+- **Type definitions**: Native module types defined in `types/` directory for compile-time safety
 
 ### Async Server Pattern with Threading
 - **Core design**: RMQTT server runs on dedicated Tokio runtime to avoid blocking Node.js event loop
 - **Communication**: Uses `mpsc::channel` for JavaScript→Rust commands and `neon::event::Channel` for Rust→JavaScript callbacks
 - **Server lifecycle**: Supports start/stop operations with graceful shutdown and configuration validation
+- **TypeScript promises**: All async operations return properly typed Promise objects
 
-```rust
-// Key pattern: Server lifecycle management
-server.start_with_config(config, deferred, |channel, deferred| {
-    deferred.settle_with(channel, |mut cx| {
-        // Server started successfully
-        Ok(cx.undefined())
-    });
-})
+```typescript
+// Key pattern: Type-safe server configuration
+const config: ServerConfig = {
+  listeners: [{
+    name: "tcp",
+    port: 1883,
+    protocol: "tcp",
+    allowAnonymous: true
+  }]
+};
+await server.start(config);
 ```
 
 ### MQTT Configuration Pattern
+- **Strongly typed**: All configuration objects have TypeScript interfaces (`ServerConfig`, `ListenerConfig`)
 - **Multi-listener support**: Each listener has protocol (tcp/tls/ws/wss), address, port, and TLS settings
-- **Protocol flexibility**: Automatic protocol handler selection based on configuration
-- **TLS validation**: Enforces certificate/key requirements for secure protocols
+- **Protocol enforcement**: TypeScript compiler ensures only valid protocols are used
+- **TLS validation**: Runtime validation enforces certificate/key requirements for secure protocols
 
 ## Development Workflow
 
 ### Build & Test Commands
 ```bash
-# Build the native module (compiles Rust → index.node)
+# Build both native module and TypeScript
 npm run build
 
-# Run tests (includes port listening validation)
+# Build only native module (Rust → index.node)
+npm run build:native
+
+# Build only TypeScript (src → dist/)
+npm run build:ts
+
+# Run tests (TypeScript compiled to dist/ first)
 npm test
 
-# Install/rebuild after Rust changes
-npm install
+# Clean build artifacts
+npm run clean
 ```
 
 ### Key Dependencies
 - **Rust**: `neon = "1"` (JS bindings), `rmqtt = "0.16"` (MQTT server), `tokio = "1"` (async runtime)
+- **TypeScript**: `typescript = "^5.0.0"`, `@types/node`, `@types/mocha`
 - **Node.js**: `cargo-cp-artifact` (build artifact copying), `mocha` (testing)
 
 ## Critical Implementation Details
 
+### TypeScript Compilation Setup
+- **Output directory**: TypeScript compiles from root to `dist/` directory
+- **Native module path**: Compiled JS files reference `dist/index.node`
+- **Type declarations**: Automatic `.d.ts` generation for library consumers
+- **Source maps**: Generated for debugging TypeScript in Node.js
+
 ### Server Lifecycle Management
 - **Thread safety**: Each server instance runs on a dedicated Tokio runtime in a separate thread
-- **Graceful shutdown**: `stop()` method properly terminates server before allowing restart
+- **Type-safe promises**: All async operations return properly typed Promise objects
 - **Resource cleanup**: Call `server.close()` in tests to prevent hanging processes
-- **State tracking**: JavaScript layer tracks `isRunning` state to prevent double-start
+- **State tracking**: TypeScript class tracks `isRunning` state with getter property
 
 ### Configuration Validation
-- **Required fields**: Each listener must have name, port, and valid protocol
-- **TLS requirements**: TLS/WSS protocols require both certificate and key paths
-- **Port validation**: Ensures port numbers are in valid range (1-65535)
-- **Protocol enforcement**: Only allows tcp, tls, ws, wss protocols
+- **Compile-time**: TypeScript interfaces prevent invalid configuration at compile time
+- **Runtime validation**: Additional checks for TLS requirements and port ranges
+- **Type guards**: Configuration validation with descriptive error messages
 
 ### Error Handling Pattern
-- **Configuration errors**: Thrown synchronously during `start()` call for immediate feedback
-- **Runtime errors**: RMQTT errors converted to Promise rejections via `SendResultExt` trait
-- **Channel errors**: Database-style error handling adapted for server message passing
+- **Typed errors**: Configuration errors thrown as Error objects with specific messages
+- **Promise rejections**: Runtime errors properly typed and converted to Promise rejections
+- **Channel errors**: Rust communication errors handled via `SendResultExt` trait
 
 ### Testing Conventions
-- **Port probing**: Tests verify actual port listening using `net.Socket` connections
-- **Non-standard ports**: Use ports like 18830+ to avoid conflicts with standard MQTT ports
+- **TypeScript tests**: Written in TypeScript with full type checking (`test/*.test.ts`)
+- **Port probing**: Tests verify actual port listening using typed `net.Socket` connections
+- **Type assertions**: Use TypeScript's type system for better test reliability
 - **Async cleanup**: Always call `server.close()` after tests to prevent process hanging
-- **Error scenarios**: Test invalid configurations and double-start prevention
 
 ## File Structure Patterns
 - `src/lib.rs`: Core Rust implementation wrapping RMQTT with Neon exports
-- `index.js`: JavaScript wrapper providing idiomatic Promise-based MQTT server API
-- `test/db.test.js`: Server lifecycle tests covering startup, configuration validation, and port binding
-- `docs/DOC_RMQTT_LIB_MODE.md`: Upstream RMQTT documentation and examples
-- `Cargo.toml`: Rust dependencies with RMQTT features (ws, tls, plugin)
-- `package.json`: NPM metadata for MQTT server package
+- `index.ts`: Main TypeScript API with full type definitions and class implementation
+- `test/server.test.ts`: TypeScript test suite with type-safe test patterns
+- `types/`: TypeScript type declarations for native modules and interfaces
+- `dist/`: Compiled JavaScript output (gitignored, generated by TypeScript compiler)
+- `tsconfig.json`: TypeScript compilation configuration
+- `Cargo.toml`: Rust dependencies with RMQTT features
+- `package.json`: NPM metadata with TypeScript build scripts
 
 ## Common Modifications
-- **Adding listener protocols**: Extend protocol validation in JavaScript and add new protocol handlers in Rust
-- **Plugin support**: Extend `ServerConfig` to include plugin configuration and registration
-- **Authentication**: Add listener-level authentication options beyond `allowAnonymous`
-- **Monitoring**: Add server status and metrics endpoints by exposing RMQTT's monitoring features
-- **Configuration presets**: Add more helper methods like `createBasicConfig()` for common setups
+- **Adding new methods**: Add to Rust with `js_*` prefix → export in `main()` → add typed method to TypeScript class
+- **Configuration options**: Extend TypeScript interfaces first, then update validation logic
+- **Protocol support**: Update TypeScript protocol union types and Rust protocol matching
+- **Type definitions**: Update interface definitions in TypeScript for compile-time safety
+
+## TypeScript Specific Patterns
+- **Interface exports**: Use `export interface` for configuration types that consumers might need
+- **Static factory methods**: Type-safe configuration builders (`createBasicConfig`, `createMultiProtocolConfig`)
+- **Generic typing**: Proper typing for Promise return values and async operations
+- **Module declarations**: Type declarations for native modules in `types/` directory
 
 ## RMQTT Integration Points
-- **ServerContext**: Manages plugins and global configuration
-- **Builder pattern**: Fluent API for configuring individual listeners
-- **Multi-protocol**: Each listener independently configured for different protocols
-- **Plugin system**: Optional plugin loading from configuration directory or inline config
+- **ServerContext**: Manages plugins and global configuration with TypeScript wrapper
+- **Builder pattern**: Fluent API configuration with TypeScript interface validation
+- **Multi-protocol**: Each listener independently configured with compile-time protocol checking
+- **Plugin system**: Optional plugin loading with TypeScript configuration interfaces
