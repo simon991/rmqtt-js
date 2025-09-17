@@ -27,6 +27,31 @@ describe("MQTT Server", () => {
         server.close();
     });
 
+    it("should allow publishing messages when server is running", async () => {
+        const server = new MqttServer();
+        const config = MqttServer.createBasicConfig(18831); // Use different port
+
+        await server.start(config);
+
+        // Test publishing a message (should not throw)
+        await server.publish("test/topic", "Hello, World!", { qos: 0, retain: false });
+        await server.publish("test/topic", Buffer.from("Binary data"), { qos: 1 });
+
+        await server.stop();
+        server.close();
+    });
+
+    it("should reject publish when server is not running", async () => {
+        const server = new MqttServer();
+
+        await assert.rejects(
+            () => server.publish("test/topic", "message"),
+            /Server must be running to publish messages/
+        );
+
+        server.close();
+    });
+
     it("should reject invalid configuration", async () => {
         const server = new MqttServer();
 

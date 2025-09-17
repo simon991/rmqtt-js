@@ -16,10 +16,14 @@
   },
   "license": "MIT",
   "devDependencies": {
+    "@types/chai": "^5.2.2",
     "@types/mocha": "^10.0.10",
+    "@types/mqtt": "^0.0.34",
     "@types/node": "^20.19.16",
     "cargo-cp-artifact": "^0.1",
+    "chai": "^6.0.1",
     "mocha": "^10.0.0",
+    "mqtt": "^5.14.1",
     "typescript": "^5.9.2"
   },
   "repository": {
