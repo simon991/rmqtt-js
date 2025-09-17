@@ -56,6 +56,41 @@ const { MqttServer } = require("mqtt-server");
 })();
 ```
 
+## Running the Example
+
+This package includes a complete example server that demonstrates all features. You can run it in several ways:
+
+### Using npm script (recommended)
+```bash
+npm run example
+```
+
+### Direct execution with Node.js (requires Node.js 20.6.0+)
+```bash
+# Build the project first
+npm run build
+
+# Run the TypeScript example directly
+node examples/simple-server.ts --experimental-strip-types
+```
+
+### Running the compiled JavaScript
+```bash
+# Build the project
+npm run build
+
+# Run the compiled example
+node dist/examples/simple-server.js
+```
+
+The example server will:
+- Start an MQTT server on port 1883
+- Show connection instructions for various clients
+- Handle graceful shutdown with Ctrl+C
+- Display helpful client connection examples
+
+**Note**: The `--experimental-strip-types` flag allows Node.js to run TypeScript files directly without compilation. This feature is available in Node.js 20.6.0 and later.
+
 ## Multi-Protocol Example
 
 ```typescript
@@ -170,9 +205,24 @@ npm run build
 # Run tests
 npm test
 
+# Run the example server
+npm run example
+
 # After changing Rust code
 npm install
 ```
+
+### Example Development
+The example server in `examples/simple-server.ts` can be run directly with:
+```bash
+node examples/simple-server.ts --experimental-strip-types
+```
+
+This demonstrates:
+- Basic MQTT server setup
+- Configuration options
+- Graceful shutdown handling
+- Client connection examples
 
 ## Requirements
 

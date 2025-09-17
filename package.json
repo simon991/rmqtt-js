@@ -11,7 +11,8 @@
     "install": "npm run build",
     "test": "npm run build:ts && mocha dist/test/**/*.test.js",
     "clean": "rm -rf dist",
-    "prepublishOnly": "npm run clean && npm run build"
+    "prepublishOnly": "npm run clean && npm run build",
+    "example": "npm run build && node examples/simple-server.ts --experimental-strip-types"
   },
   "license": "MIT",
   "devDependencies": {
