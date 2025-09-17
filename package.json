@@ -1,12 +1,12 @@
 {
-  "name": "async-sqlite",
+  "name": "mqtt-pubsub-adapter",
   "version": "0.1.0",
-  "description": "Neon Async SQLite",
+  "description": "High-performance MQTT server for Node.js built with Rust and Neon",
   "main": "index.js",
   "scripts": {
     "build": "cargo-cp-artifact -nc index.node -- cargo build --message-format=json-render-diagnostics",
     "install": "npm run build",
-    "test": "mocha"
+    "test": "mocha test/**/*.test.js"
   },
   "license": "MIT",
   "devDependencies": {
@@ -15,14 +15,33 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/neon-bindings/examples.git"
+    "url": "git+https://github.com/splitbuddies/mqtt-pubsub-adapter.git"
   },
   "keywords": [
-    "Neon",
-    "Examples"
+    "mqtt",
+    "pubsub",
+    "broker",
+    "server",
+    "rust",
+    "neon",
+    "rmqtt",
+    "iot",
+    "websocket",
+    "tls"
   ],
+  "author": "splitbuddies",
   "bugs": {
-    "url": "https://github.com/neon-bindings/examples/issues"
+    "url": "https://github.com/splitbuddies/mqtt-pubsub-adapter/issues"
   },
-  "homepage": "https://github.com/neon-bindings/examples#readme"
+  "homepage": "https://github.com/splitbuddies/mqtt-pubsub-adapter#readme",
+  "engines": {
+    "node": ">=14.0.0"
+  },
+  "files": [
+    "index.js",
+    "index.node",
+    "src/",
+    "Cargo.toml",
+    "README.md"
+  ]
 }

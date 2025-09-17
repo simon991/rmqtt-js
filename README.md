@@ -1,55 +1,162 @@
-# Async SQLite
+# MQTT PubSub Adapter
 
-The Async SQLite example implements a simple database in Rust with a JavaScript API.
+A high-performance MQTT server for Node.js built with Rust and Neon bindings. This package wraps the powerful [RMQTT](https://github.com/rmqtt/rmqtt) Rust library to provide an easy-to-use MQTT broker that can handle thousands of concurrent connections.
 
-## Usage
+## Features
+
+- **High Performance**: Built on Tokio and RMQTT for excellent async performance
+- **Multi-Protocol Support**: TCP, TLS, WebSocket, and WebSocket Secure (WSS)
+- **Multiple Listeners**: Support for binding multiple listeners simultaneously
+- **TLS Encryption**: Easy TLS configuration for secure connections
+- **Lightweight**: Minimal overhead native bindings
+- **Simple API**: Clean JavaScript interface with Promise-based async operations
+
+## Installation
+
+```bash
+npm install mqtt-pubsub-adapter
+```
+
+## Quick Start
 
 ```js
-const Database = require(".");
+const MqttServer = require("mqtt-pubsub-adapter");
 
 (async () => {
-    const db = new Database();
-
-    const id = await db.insert("Marty McFly");
-    const name = await db.byId(id);
-
-    console.log(name);
+    const server = new MqttServer();
+    
+    // Create a basic TCP server on port 1883
+    const config = MqttServer.createBasicConfig(1883);
+    
+    await server.start(config);
+    console.log("MQTT server started on port 1883");
+    
+    // Server will run until stopped
+    // await server.stop();
 })();
 ```
 
-## Design
+## Multi-Protocol Example
 
-### Rust
+```js
+const MqttServer = require("mqtt-pubsub-adapter");
 
-SQLite provides a _synchronous_ interface. This means that the current thread is blocked while a query is executing. Ideally, JavaScript would be able to continue executing concurrently with query execution.
+(async () => {
+    const server = new MqttServer();
+    
+    // Configure multiple protocols
+    const config = MqttServer.createMultiProtocolConfig({
+        tcpPort: 1883,      // Standard MQTT
+        tlsPort: 8883,      // Secure MQTT
+        wsPort: 8080,       // MQTT over WebSocket
+        wssPort: 8443,      // MQTT over Secure WebSocket
+        tlsCert: "./server.pem",
+        tlsKey: "./server.key"
+    });
+    
+    await server.start(config);
+    console.log("Multi-protocol MQTT server started");
+})();
+```
 
-The Async SQLite example demonstrates one pattern for moving database operations to a separate thread and asynchronously calling back to JavaScript when the operation has completed.
+## Custom Configuration
 
-#### Threads and Channels
+```js
+const server = new MqttServer();
 
-Since SQLite is naturally single threaded, our application does not benefit from a thread pool or connection pool when querying the database. Instead, a _single_ rust [thread][thread] is spawned for performing database operations.
+const config = {
+    listeners: [
+        {
+            name: "external-tcp",
+            address: "0.0.0.0",
+            port: 1883,
+            protocol: "tcp",
+            allowAnonymous: true
+        },
+        {
+            name: "internal-tcp", 
+            address: "127.0.0.1",
+            port: 11883,
+            protocol: "tcp",
+            allowAnonymous: false
+        },
+        {
+            name: "websocket",
+            address: "0.0.0.0",
+            port: 8080,
+            protocol: "ws",
+            allowAnonymous: true
+        }
+    ]
+};
 
-Once the database thread is spawned, the JavaScript main thread needs a way to communicate with it. A [multi-producer, single-consumer (mpsc)][mpsc] channel is created. The receiving end is owned by the database thread and the sender is held by JavaScript.
+await server.start(config);
+```
 
-#### `JsBox`
+## API Reference
 
-Rust data cannot be directly held by JavaScript. The [`JsBox`][jsbox] provides a mechanism for allowing JavaScript to hold a reference to Rust data and later access it again from Rust.
+### `MqttServer`
 
-#### Rust and Neon Channels
+#### Constructor
+- `new MqttServer()` - Creates a new MQTT server instance
 
-The mpsc channel provides a way for the JavaScript main thread to communicate with the database thread, but it is one-way. In order to complete the callback, the database thread must be able to communicate with the JavaScript main thread. [`neon::event::Channel`][channel] provides a channel for sending these events back.
+#### Methods
+- `start(config)` - Start the server with the given configuration
+- `stop()` - Stop the server gracefully  
+- `close()` - Close and cleanup resources (call this to exit immediately)
+- `running` - Property indicating if server is currently running
 
-#### `Root`
+#### Static Methods
+- `MqttServer.createBasicConfig(port, address)` - Create a simple TCP configuration
+- `MqttServer.createMultiProtocolConfig(options)` - Create multi-protocol configuration
 
-The last issue to solve is sending a reference to the JavaScript callback to the database thread and back again before finally calling it. [Handles][handle] to JavaScript values are not `Send`; they cannot escape the scope that created them. The reason they cannot be passed to other threads is because when control is returned back to the JavaScript engine, the garbage collector may determine they are no longer used and free the value.
+### Configuration Object
 
-A [`Root`][root] is a special handle to a JavaScript value that prevents the value from being freed as long as the `Root` has not been dropped. By placing the callback in a `Root`, it can be safely sent across threads and finally accessed and called when back on the JavaScript main thread.
+```js
+{
+    listeners: [
+        {
+            name: "string",           // Listener identifier
+            address: "string",        // Bind address (default: "0.0.0.0")
+            port: number,             // Port number
+            protocol: "tcp|tls|ws|wss", // Protocol type
+            tlsCert: "string",        // TLS certificate path (for tls/wss)
+            tlsKey: "string",         // TLS key path (for tls/wss)
+            allowAnonymous: boolean   // Allow anonymous connections (default: true)
+        }
+    ],
+    pluginsConfigDir: "string"        // Optional: Plugin configuration directory
+}
+```
 
-### JavaScript
+## Architecture
 
-[thread]: https://doc.rust-lang.org/std/thread/
-[mpsc]: https://doc.rust-lang.org/std/sync/mpsc/index.html
-[jsbox]: https://docs.rs/neon/latest/neon/types/struct.JsBox.html
-[channel]: https://docs.rs/neon/latest/neon/event/struct.Channel.html
-[handle]: https://docs.rs/neon/latest/neon/handle/struct.Handle.html
-[root]: https://docs.rs/neon/latest/neon/handle/struct.Root.html
+This package uses Neon bindings to bridge JavaScript and Rust:
+
+- **JavaScript Layer**: Provides an idiomatic Node.js API with Promise-based async operations
+- **Rust Layer**: Handles the actual MQTT server using RMQTT on a dedicated thread pool
+- **Communication**: Uses channels for thread-safe communication between JS and Rust
+
+The server runs on separate threads to avoid blocking the Node.js event loop, ensuring excellent performance for both MQTT operations and your Node.js application.
+
+## Development
+
+```bash
+# Build the native module
+npm run build
+
+# Run tests
+npm test
+
+# After changing Rust code
+npm install
+```
+
+## Requirements
+
+- Node.js 14.0.0 or higher
+- Rust toolchain (for building from source)
+
+## License
+
+MIT

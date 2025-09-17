@@ -1,9 +1,9 @@
 [package]
-name = "async-sqlite"
+name = "mqtt-pubsub-adapter"
 version = "0.1.0"
-description = "Neon Async SQLite"
+description = "Neon MQTT Server Adapter"
 license = "MIT"
-edition = "2018"
+edition = "2021"
 exclude = ["index.node"]
 
 [lib]
@@ -11,4 +11,5 @@ crate-type = ["cdylib"]
 
 [dependencies]
 neon = "1"
-rusqlite = "0.25"
+rmqtt = { version = "0.16", features = ["ws", "tls", "plugin"] }
+tokio = { version = "1", features = ["full"] }

@@ -1,84 +1,88 @@
 use std::sync::mpsc;
 use std::thread;
+use std::collections::HashMap;
 
 use neon::{prelude::*, types::Deferred};
-use rusqlite::Connection;
+use rmqtt::{context::ServerContext, net::Builder, server::MqttServer as RmqttServer, Result as RmqttResult};
 
-type DbCallback = Box<dyn FnOnce(&mut Connection, &Channel, Deferred) + Send>;
+type ServerCallback = Box<dyn FnOnce(&Channel, Deferred) + Send>;
 
-// Wraps a SQLite connection a channel, allowing concurrent access
-struct Database {
-    tx: mpsc::Sender<DbMessage>,
+// Wraps an RMQTT server instance with async communication
+struct MqttServerWrapper {
+    tx: mpsc::Sender<ServerMessage>,
 }
 
-// Messages sent on the database channel
-enum DbMessage {
+// Messages sent on the server channel
+enum ServerMessage {
     // Promise to resolve and callback to be executed
-    // Deferred is threaded through the message instead of moved to the closure so that it
-    // can be manually rejected.
-    Callback(Deferred, DbCallback),
-    // Indicates that the thread should be stopped and connection closed
+    Callback(Deferred, ServerCallback),
+    // Start the server with given configuration
+    Start(ServerConfig, Deferred, ServerCallback),
+    // Stop the server
+    Stop(Deferred, ServerCallback),
+    // Indicates that the thread should be stopped
     Close,
 }
 
-// Clean-up when Database is garbage collected, could go here
-// but, it's not needed,
-impl Finalize for Database {}
+#[derive(Debug, Clone)]
+struct ListenerConfig {
+    name: String,
+    address: String,
+    port: u16,
+    protocol: String, // "tcp", "tls", "ws", "wss"
+    tls_cert: Option<String>,
+    tls_key: Option<String>,
+    allow_anonymous: bool,
+}
 
-// Internal implementation
-impl Database {
-    // Creates a new instance of `Database`
-    //
-    // 1. Creates a connection and a channel
-    // 2. Spawns a thread and moves the channel receiver and connection to it
-    // 3. On a separate thread, read closures off the channel and execute with access
-    //    to the connection.
-    fn new<'a, C>(cx: &mut C) -> rusqlite::Result<Self>
+#[derive(Debug, Clone)]
+struct ServerConfig {
+    listeners: Vec<ListenerConfig>,
+    plugins_config_dir: Option<String>,
+    plugins_config: HashMap<String, String>,
+}
+
+impl Finalize for MqttServerWrapper {}
+
+impl MqttServerWrapper {
+    fn new<'a, C>(cx: &mut C) -> neon::result::NeonResult<Self>
     where
         C: Context<'a>,
     {
-        // Channel for sending callbacks to execute on the sqlite connection thread
-        let (tx, rx) = mpsc::channel::<DbMessage>();
-
-        // Open a connection sqlite, this will be moved to the thread
-        let mut conn = Connection::open_in_memory()?;
-
-        // Create an `Channel` for calling back to JavaScript. It is more efficient
-        // to create a single channel and re-use it for all database callbacks.
-        // The JavaScript process will not exit as long as this channel has not been
-        // dropped.
+        let (tx, rx) = mpsc::channel::<ServerMessage>();
         let channel = cx.channel();
 
-        // Create a table in the in-memory database
-        // In production code, this would likely be handled somewhere else
-        conn.execute(
-            r#"
-                CREATE TABLE person (
-                    id   INTEGER PRIMARY KEY AUTOINCREMENT,
-                    name TEXT NOT NULL
-                )
-            "#,
-            [],
-        )?;
-
-        // Spawn a thread for processing database queries
-        // This will not block the JavaScript main thread and will continue executing
-        // concurrently.
+        // Spawn a thread for managing the MQTT server
         thread::spawn(move || {
-            // Blocks until a callback is available
-            // When the instance of `Database` is dropped, the channel will be closed
-            // and `rx.recv()` will return an `Err`, ending the loop and terminating
-            // the thread.
+            let rt = tokio::runtime::Runtime::new().expect("Failed to create Tokio runtime");
+            let mut server_handle: Option<tokio::task::JoinHandle<RmqttResult<()>>> = None;
+
             while let Ok(message) = rx.recv() {
                 match message {
-                    DbMessage::Callback(deferred, f) => {
-                        // The connection and channel are owned by the thread, but _lent_ to
-                        // the callback. The callback has exclusive access to the connection
-                        // for the duration of the callback.
-                        f(&mut conn, &channel, deferred);
+                    ServerMessage::Callback(deferred, f) => {
+                        f(&channel, deferred);
                     }
-                    // Immediately close the connection, even if there are pending messages
-                    DbMessage::Close => break,
+                    ServerMessage::Start(config, deferred, callback) => {
+                        // Stop existing server if running
+                        if let Some(handle) = server_handle.take() {
+                            handle.abort();
+                        }
+
+                        // Start new server
+                        let server_config = config.clone();
+                        server_handle = Some(rt.spawn(async move {
+                            Self::start_server(server_config).await
+                        }));
+
+                        callback(&channel, deferred);
+                    }
+                    ServerMessage::Stop(deferred, callback) => {
+                        if let Some(handle) = server_handle.take() {
+                            handle.abort();
+                        }
+                        callback(&channel, deferred);
+                    }
+                    ServerMessage::Close => break,
                 }
             }
         });
@@ -86,69 +90,115 @@ impl Database {
         Ok(Self { tx })
     }
 
-    // Idiomatic rust would take an owned `self` to prevent use after close
-    // However, it's not possible to prevent JavaScript from continuing to hold a closed database
-    fn close(&self) -> Result<(), mpsc::SendError<DbMessage>> {
-        self.tx.send(DbMessage::Close)
+    async fn start_server(config: ServerConfig) -> RmqttResult<()> {
+        let mut context_builder = ServerContext::new();
+        
+        if let Some(plugins_dir) = config.plugins_config_dir {
+            context_builder = context_builder.plugins_config_dir(&plugins_dir);
+        }
+
+        for (plugin_name, plugin_config) in config.plugins_config {
+            context_builder = context_builder.plugins_config_map_add(&plugin_name, &plugin_config);
+        }
+
+        let scx = context_builder.build().await;
+        let mut server_builder = RmqttServer::new(scx);
+
+        for listener_config in config.listeners {
+            let mut builder = Builder::new()
+                .name(&listener_config.name)
+                .laddr((listener_config.address.parse::<std::net::IpAddr>()
+                    .unwrap_or_else(|_| "0.0.0.0".parse().unwrap()), listener_config.port).into())
+                .allow_anonymous(listener_config.allow_anonymous);
+
+            if let Some(cert) = listener_config.tls_cert {
+                builder = builder.tls_cert(Some(&cert));
+            }
+            if let Some(key) = listener_config.tls_key {
+                builder = builder.tls_key(Some(&key));
+            }
+
+            let bound_builder = builder.bind()?;
+
+            let listener = match listener_config.protocol.as_str() {
+                "tcp" => bound_builder.tcp()?,
+                "tls" => bound_builder.tls()?,
+                "ws" => bound_builder.ws()?,
+                "wss" => bound_builder.wss()?,
+                _ => {
+                    return Err(std::io::Error::new(
+                        std::io::ErrorKind::InvalidInput,
+                        format!("Invalid protocol: {}", listener_config.protocol)
+                    ).into());
+                }
+            };
+
+            server_builder = server_builder.listener(listener);
+        }
+
+        server_builder.build().run().await
+    }
+
+    fn close(&self) -> Result<(), mpsc::SendError<ServerMessage>> {
+        self.tx.send(ServerMessage::Close)
     }
 
     fn send(
         &self,
         deferred: Deferred,
-        callback: impl FnOnce(&mut Connection, &Channel, Deferred) + Send + 'static,
-    ) -> Result<(), mpsc::SendError<DbMessage>> {
+        callback: impl FnOnce(&Channel, Deferred) + Send + 'static,
+    ) -> Result<(), mpsc::SendError<ServerMessage>> {
         self.tx
-            .send(DbMessage::Callback(deferred, Box::new(callback)))
+            .send(ServerMessage::Callback(deferred, Box::new(callback)))
+    }
+
+    fn start_with_config(
+        &self,
+        config: ServerConfig,
+        deferred: Deferred,
+        callback: impl FnOnce(&Channel, Deferred) + Send + 'static,
+    ) -> Result<(), mpsc::SendError<ServerMessage>> {
+        self.tx
+            .send(ServerMessage::Start(config, deferred, Box::new(callback)))
+    }
+
+    fn stop_server(
+        &self,
+        deferred: Deferred,
+        callback: impl FnOnce(&Channel, Deferred) + Send + 'static,
+    ) -> Result<(), mpsc::SendError<ServerMessage>> {
+        self.tx
+            .send(ServerMessage::Stop(deferred, Box::new(callback)))
     }
 }
 
-// Methods exposed to JavaScript
-// The `JsBox` boxed `Database` is expected as the `this` value on all methods except `js_new`
-impl Database {
-    // Create a new instance of `Database` and place it inside a `JsBox`
-    // JavaScript can hold a reference to a `JsBox`, but the contents are opaque
-    fn js_new(mut cx: FunctionContext) -> JsResult<JsBox<Database>> {
-        let db = Database::new(&mut cx).or_else(|err| cx.throw_error(err.to_string()))?;
+// JavaScript-exposed methods
+impl MqttServerWrapper {
+    fn js_new(mut cx: FunctionContext) -> JsResult<JsBox<MqttServerWrapper>> {
+        let server = MqttServerWrapper::new(&mut cx)
+            .or_else(|err| cx.throw_error(format!("Failed to create MQTT server: {}", err)))?;
 
-        Ok(cx.boxed(db))
+        Ok(cx.boxed(server))
     }
 
-    // Manually close a database connection
-    // After calling `close`, all other methods will fail
-    // It is not necessary to call `close` since the database will be closed when the wrapping
-    // `JsBox` is garbage collected. However, calling `close` allows the process to exit
-    // immediately instead of waiting on garbage collection. This is useful in tests.
     fn js_close(mut cx: FunctionContext) -> JsResult<JsUndefined> {
-        // Get the `this` value as a `JsBox<Database>`
-        cx.this::<JsBox<Database>>()?
+        cx.this::<JsBox<MqttServerWrapper>>()?
             .close()
             .or_else(|err| cx.throw_error(err.to_string()))?;
 
         Ok(cx.undefined())
     }
 
-    // Inserts a `name` into the database
-    // Accepts a `name` and returns a `Promise`
-    fn js_insert(mut cx: FunctionContext) -> JsResult<JsPromise> {
-        // Get the first argument as a `JsString` and convert to a Rust `String`
-        let name = cx.argument::<JsString>(0)?.value(&mut cx);
+    fn js_start(mut cx: FunctionContext) -> JsResult<JsPromise> {
+        let config_obj = cx.argument::<JsObject>(0)?;
+        let config = Self::parse_config(&mut cx, config_obj)?;
 
-        // Get the `this` value as a `JsBox<Database>`
-        let db = cx.this::<JsBox<Database>>()?;
+        let server = cx.this::<JsBox<MqttServerWrapper>>()?;
         let (deferred, promise) = cx.promise();
 
-        db.send(deferred, move |conn, channel, deferred| {
-            let result = conn
-                .execute(
-                    "INSERT INTO person (name) VALUES (?)",
-                    rusqlite::params![name],
-                )
-                .map(|_| conn.last_insert_rowid());
-
-            deferred.settle_with(channel, move |mut cx| {
-                let id = result.or_else(|err| cx.throw_error(err.to_string()))?;
-
-                Ok(cx.number(id as f64))
+        server.start_with_config(config, deferred, |channel, deferred| {
+            deferred.settle_with(channel, |mut cx| {
+                Ok(cx.undefined())
             });
         })
         .into_rejection(&mut cx)?;
@@ -156,57 +206,81 @@ impl Database {
         Ok(promise)
     }
 
-    // Get a `name` by `id` value
-    // Accepts an `id` and callback as parameters
-    fn js_get_by_id(mut cx: FunctionContext) -> JsResult<JsPromise> {
-        // Get the first argument as a `JsNumber` and convert to an `f64`
-        let id = cx.argument::<JsNumber>(0)?.value(&mut cx);
-
-        // Get the `this` value as a `JsBox<Database>`
-        let db = cx.this::<JsBox<Database>>()?;
+    fn js_stop(mut cx: FunctionContext) -> JsResult<JsPromise> {
+        let server = cx.this::<JsBox<MqttServerWrapper>>()?;
         let (deferred, promise) = cx.promise();
 
-        db.send(deferred, move |conn, channel, deferred| {
-            let result: Result<String, _> = conn
-                .prepare("SELECT name FROM person WHERE id = ?")
-                .and_then(|mut stmt| stmt.query_row(rusqlite::params![id], |row| row.get(0)));
-
-            deferred.settle_with(channel, move |mut cx| -> JsResult<JsValue> {
-                // If the row was not found, return `undefined` as a success instead
-                // of throwing an exception
-                if matches!(result, Err(rusqlite::Error::QueryReturnedNoRows)) {
-                    return Ok(cx.undefined().upcast());
-                }
-
-                let name = result.or_else(|err| cx.throw_error(err.to_string()))?;
-
-                Ok(cx.string(name).upcast())
+        server.stop_server(deferred, |channel, deferred| {
+            deferred.settle_with(channel, |mut cx| {
+                Ok(cx.undefined())
             });
         })
         .into_rejection(&mut cx)?;
 
         Ok(promise)
+    }
+
+    fn parse_config(cx: &mut FunctionContext, config_obj: Handle<JsObject>) -> NeonResult<ServerConfig> {
+        let listeners_array = config_obj.get::<JsArray, _, _>(cx, "listeners")?;
+        let mut listeners = Vec::new();
+
+        for i in 0..listeners_array.len(cx) {
+            let listener_obj = listeners_array.get::<JsObject, _, _>(cx, i)?;
+            
+            let name = listener_obj.get::<JsString, _, _>(cx, "name")?.value(cx);
+            let address = listener_obj.get::<JsString, _, _>(cx, "address")?.value(cx);
+            let port = listener_obj.get::<JsNumber, _, _>(cx, "port")?.value(cx) as u16;
+            let protocol = listener_obj.get::<JsString, _, _>(cx, "protocol")?.value(cx);
+            
+            let tls_cert = listener_obj.get_opt::<JsString, _, _>(cx, "tlsCert")?
+                .map(|s| s.value(cx));
+            let tls_key = listener_obj.get_opt::<JsString, _, _>(cx, "tlsKey")?
+                .map(|s| s.value(cx));
+            let allow_anonymous = listener_obj.get_opt::<JsBoolean, _, _>(cx, "allowAnonymous")?
+                .map(|b| b.value(cx))
+                .unwrap_or(true);
+
+            listeners.push(ListenerConfig {
+                name,
+                address,
+                port,
+                protocol,
+                tls_cert,
+                tls_key,
+                allow_anonymous,
+            });
+        }
+
+        let plugins_config_dir = config_obj.get_opt::<JsString, _, _>(cx, "pluginsConfigDir")?
+            .map(|s| s.value(cx));
+
+        let plugins_config = HashMap::new(); // TODO: Parse plugins config from JS object
+
+        Ok(ServerConfig {
+            listeners,
+            plugins_config_dir,
+            plugins_config,
+        })
     }
 }
 
 trait SendResultExt {
-    // Sending a query closure to execute may fail if the channel has been closed.
-    // This method converts the failure into a promise rejection.
     fn into_rejection<'a, C: Context<'a>>(self, cx: &mut C) -> NeonResult<()>;
 }
 
-impl SendResultExt for Result<(), mpsc::SendError<DbMessage>> {
+impl SendResultExt for Result<(), mpsc::SendError<ServerMessage>> {
     fn into_rejection<'a, C: Context<'a>>(self, cx: &mut C) -> NeonResult<()> {
         self.or_else(|err| {
             let msg = err.to_string();
-
             match err.0 {
-                DbMessage::Callback(deferred, _) => {
+                ServerMessage::Callback(deferred, _) |
+                ServerMessage::Start(_, deferred, _) |
+                ServerMessage::Stop(deferred, _) => {
                     let err = cx.error(msg)?;
                     deferred.reject(cx, err);
                     Ok(())
                 }
-                DbMessage::Close => cx.throw_error("Expected DbMessage::Callback"),
+                ServerMessage::Close => cx.throw_error("Expected server message with deferred"),
             }
         })
     }
@@ -214,10 +288,10 @@ impl SendResultExt for Result<(), mpsc::SendError<DbMessage>> {
 
 #[neon::main]
 fn main(mut cx: ModuleContext) -> NeonResult<()> {
-    cx.export_function("databaseNew", Database::js_new)?;
-    cx.export_function("databaseClose", Database::js_close)?;
-    cx.export_function("databaseInsert", Database::js_insert)?;
-    cx.export_function("databaseGetById", Database::js_get_by_id)?;
+    cx.export_function("mqttServerNew", MqttServerWrapper::js_new)?;
+    cx.export_function("mqttServerClose", MqttServerWrapper::js_close)?;
+    cx.export_function("mqttServerStart", MqttServerWrapper::js_start)?;
+    cx.export_function("mqttServerStop", MqttServerWrapper::js_stop)?;
 
     Ok(())
 }
