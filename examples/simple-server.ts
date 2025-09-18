@@ -3,6 +3,12 @@
 /**
  * Simple MQTT Server Example
  * 
+ * Demonstrates the full pub/sub API including:
+ * - Real-time MQTT event hooks
+ * - Server-side message publishing  
+ * - QoS levels and message retention
+ * - Message processing and forwarding
+ * 
  * Run this example:
  *   npm run example
  *   
@@ -14,14 +20,24 @@
  */
 
 import * as MqttModule from '../dist/index.js';
+import type { ServerConfig } from '../dist/index.js';
 
-const { MqttServer } = MqttModule;
+const { MqttServer, QoS } = MqttModule;
 
 /**
  * Simple MQTT Server Example
  * 
  * This example demonstrates how to create and manage an MQTT server
- * using the mqtt-pubsub-adapter library.
+ * using the mqtt-pubsub-adapter library with full pub/sub functionality.
+ * 
+ * Features demonstrated:
+ * - Basic server setup with real-time event hooks
+ * - Publishing messages from the server
+ * - Monitoring client subscriptions and message publishes
+ * - Periodic heartbeat publishing
+ * - Graceful shutdown handling
+ * 
+ * Also available: pubSubExample() for advanced message processing patterns
  */
 
 async function main() {
@@ -29,11 +45,18 @@ async function main() {
 
     // Create a new MQTT server instance
     const server = new MqttServer();
+    let heartbeatInterval: NodeJS.Timeout | null = null;
+
 
     // Set up graceful shutdown
     const shutdown = async () => {
         console.log('\n⏹️  Shutting down server...');
         try {
+            // Clean up interval
+            if (heartbeatInterval) {
+                clearInterval(heartbeatInterval);
+            }
+
             await server.stop();
             server.close();
             console.log('✅ Server stopped gracefully');
@@ -49,33 +72,116 @@ async function main() {
     process.on('SIGTERM', shutdown);
 
     try {
-        // Example 1: Basic TCP server
+        // Example 1: Basic TCP server with pub/sub functionality
         console.log('\n📡 Starting basic TCP MQTT server on port 1883...');
-        const basicConfig = MqttServer.createBasicConfig(1883, '0.0.0.0');
+
+        const basicConfig: ServerConfig = {
+            listeners: [{
+                name: "tcp",
+                address: "0.0.0.0",
+                port: 1883,
+                protocol: 'tcp',
+                allowAnonymous: false  // Require authentication
+            }],
+            pluginsConfigDir: './examples/plugins',
+            pluginsDefaultStartups: []
+        };
+
+        console.log('\n🔐 Authentication:');
+        console.log('   - Authentication is implemented via JavaScript onClientAuthenticate hook');
+        console.log('   - Anonymous connections are disabled to enforce authentication');
+        console.log('\n📝 Authentication implemented via custom auth hook (see below)');
+        console.log('\n📡 Client Connection Examples (password must be "demo"):');
+        console.log('   mosquitto_pub -h localhost -p 1883 -u alice -P "demo" -t "alice/test" -m "Hello!"');
+        console.log('   mosquitto_sub -h localhost -p 1883 -u alice -P "demo" -t "alice/+"');
+
+        // Set up real-time event hooks to monitor MQTT activity
+        server.setHooks({
+            // Demo authentication hook: allow users when password === "demo".
+            // In production, replace with real credential checks (e.g., DB, OAuth, JWT validation, etc.).
+            onClientAuthenticate: (auth) => {
+                const { username, password, clientId, remoteAddr } = auth;
+                const allowed = Boolean(username) && password === 'demo';
+                if (!allowed) {
+                    console.warn(`Auth DENY: clientId=${clientId}, user=${username}, from=${remoteAddr}`);
+                    return { allow: false, superuser: false, reason: 'Invalid credentials' };
+                }
+                console.log(`Auth ALLOW: clientId=${clientId}, user=${username}, from=${remoteAddr}`);
+                return { allow: true, superuser: false, reason: 'Demo credentials accepted' };
+            },
+            onMessagePublish: (session, from, message) => {
+                console.log(`📨 Message published to "${message.topic}": ${message.payload.toString()}`);
+                console.log(`   - From: ${from.type} (${from.clientId})`);
+                console.log(`   - QoS: ${message.qos}, Retain: ${message.retain}`);
+
+                // Log potential ACL enforcement
+                if (from.type === 'client' && from.username) {
+                    const topicPrefix = message.topic.split('/')[0];
+                    if (topicPrefix === from.username) {
+                        console.log(`   ✅ ACL: User "${from.username}" correctly publishing to their topic space`);
+                    } else {
+                        console.log(`   ⚠️  ACL: User "${from.username}" publishing to "${message.topic}" - check ACL rules`);
+                    }
+                }
+            },
+            onClientSubscribe: (session, subscription) => {
+                console.log(`📝 Client subscribed to: "${subscription.topicFilter}" (QoS ${subscription.qos})`);
+
+                // Note: The actual ACL enforcement happens at the RMQTT level before this hook is called
+                // If we see this message, it means the subscription was allowed by ACL
+                if (session && session.username) {
+                    const topicPrefix = subscription.topicFilter.split('/')[0];
+                    if (topicPrefix === session.username) {
+                        console.log(`   ✅ ACL: User "${session.username}" subscribed to their topic space`);
+                    } else if (subscription.topicFilter.startsWith('server/')) {
+                        console.log(`   ✅ ACL: User "${session.username}" subscribed to allowed server topic`);
+                    }
+                }
+            },
+            onClientUnsubscribe: (session, unsubscription) => {
+                console.log(`📤 Client unsubscribed from: "${unsubscription.topicFilter}"`);
+            }
+        });
 
         await server.start(basicConfig);
         console.log('✅ Server started successfully!');
         console.log(`   - Protocol: TCP`);
         console.log(`   - Address: 0.0.0.0:1883`);
-        console.log(`   - Anonymous connections: enabled`);
+        console.log(`   - Anonymous connections: disabled`);
+        console.log(`   - Real-time event hooks: active`);
 
         // Log server status
         console.log(`\n📊 Server status: ${server.running ? 'Running' : 'Stopped'}`);
 
-        // Example client connection instructions
-        console.log('\n🔗 Connect to your MQTT server:');
-        console.log('   Using mosquitto_pub/sub:');
-        console.log('     mosquitto_pub -h localhost -p 1883 -t "test/topic" -m "Hello MQTT!"');
-        console.log('     mosquitto_sub -h localhost -p 1883 -t "test/topic"');
-        console.log('');
-        console.log('   Using MQTT.js:');
-        console.log('     const mqtt = require("mqtt");');
-        console.log('     const client = mqtt.connect("mqtt://localhost:1883");');
-        console.log('');
-        console.log('   Using Python paho-mqtt:');
-        console.log('     import paho.mqtt.client as mqtt');
-        console.log('     client = mqtt.Client()');
-        console.log('     client.connect("localhost", 1883, 60)');
+        // Demonstrate server-side publishing
+        console.log('\n🔄 Publishing example messages from server...');
+
+        // Publish a welcome message
+        await server.publish('server/status', 'Server started successfully', {
+            qos: QoS.AtLeastOnce,
+            retain: true
+        });
+
+        // Publish some example sensor data
+        setTimeout(async () => {
+            const sensorData = {
+                temperature: 23.5,
+                humidity: 65.2,
+                timestamp: Date.now()
+            };
+            await server.publish('sensors/environment', JSON.stringify(sensorData));
+        }, 200);
+
+        // Publish a periodic heartbeat
+        heartbeatInterval = setInterval(async () => {
+            if (server.running) {
+                await server.publish('server/heartbeat', new Date().toISOString(), {
+                    qos: QoS.AtMostOnce
+                });
+            } else {
+                if (heartbeatInterval) clearInterval(heartbeatInterval);
+            }
+        }, 30000); // Every 30 seconds
 
         // Keep the server running
         console.log('\n⏳ Server is running... Press Ctrl+C to stop');
@@ -100,6 +206,89 @@ async function main() {
 
         process.exit(1);
     }
+}
+
+// Example 2: Advanced pub/sub with message processing
+async function pubSubExample() {
+    console.log('\n🔄 Advanced Pub/Sub Example');
+
+    const server = new MqttServer();
+
+    // Set up intelligent message processing hooks
+    server.setHooks({
+        onMessagePublish: (session, from, message) => {
+            console.log(`📨 Processing message: ${message.topic}`);
+
+            // Automatically process sensor data
+            if (message.topic.startsWith('sensors/')) {
+                try {
+                    const data = JSON.parse(message.payload.toString());
+
+                    // Add processing timestamp
+                    const processedData = {
+                        ...data,
+                        processed_at: new Date().toISOString(),
+                        processed_by: 'mqtt-server'
+                    };
+
+                    // Republish to processed topic
+                    const processedTopic = message.topic.replace('sensors/', 'processed/');
+                    server.publish(processedTopic, JSON.stringify(processedData), {
+                        qos: QoS.AtLeastOnce,
+                        retain: true
+                    }).catch(err => console.error('Error republishing:', err));
+
+                    console.log(`✅ Processed and republished to: ${processedTopic}`);
+                } catch (error) {
+                    console.error(`❌ Error processing sensor data from ${message.topic}:`, error);
+                }
+            }
+
+            // Alert on critical messages
+            if (message.topic.includes('alert') || message.topic.includes('critical')) {
+                server.publish('alerts/all', `ALERT: ${message.topic} - ${message.payload.toString()}`, {
+                    qos: QoS.ExactlyOnce,
+                    retain: false
+                }).catch(err => console.error('Error sending alert:', err));
+
+                console.log('🚨 Critical alert forwarded to alerts/all');
+            }
+        },
+
+        onClientSubscribe: (session, subscription) => {
+            console.log(`👤 New subscription: ${subscription.topicFilter}`);
+
+            // Send welcome message to new subscribers
+            if (subscription.topicFilter.startsWith('welcome/')) {
+                setTimeout(() => {
+                    server.publish(subscription.topicFilter, JSON.stringify({
+                        type: 'welcome',
+                        message: 'Welcome to the MQTT server!',
+                        server_time: new Date().toISOString(),
+                        features: ['real-time hooks', 'message processing', 'QoS support']
+                    }), {
+                        qos: subscription.qos
+                    }).catch(err => console.error('Error sending welcome:', err));
+                }, 100);
+            }
+        },
+
+        onClientUnsubscribe: (session, unsubscription) => {
+            console.log(`👋 Client unsubscribed: ${unsubscription.topicFilter}`);
+        }
+    });
+
+    const config = MqttServer.createBasicConfig(1884, '0.0.0.0'); // Different port
+    await server.start(config);
+
+    console.log('✅ Advanced pub/sub server started on port 1884');
+    console.log('📝 Try these commands to see message processing:');
+    console.log('   mosquitto_pub -h localhost -p 1884 -t "sensors/temp" -m \'{"value": 25.5, "unit": "C"}\'');
+    console.log('   mosquitto_pub -h localhost -p 1884 -t "alerts/critical" -m "System overheating"');
+    console.log('   mosquitto_sub -h localhost -p 1884 -t "welcome/test"  # Then subscribe to see welcome message');
+    console.log('   mosquitto_sub -h localhost -p 1884 -t "processed/+" -v  # See processed messages');
+
+    return server;
 }
 
 // Example 3: Multi-protocol with TLS (requires certificates)
@@ -134,4 +323,4 @@ if (process.argv[1] && process.argv[1].endsWith('simple-server.ts')) {
     });
 }
 
-export { main, multiProtocolExample };
+export { main, pubSubExample, multiProtocolExample };

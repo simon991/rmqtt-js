@@ -3,23 +3,29 @@
 import * as assert from "assert";
 import * as net from "net";
 import { MqttServer, ServerConfig } from "../index";
+import { waitForPort } from './helpers';
 
 describe("MQTT Server", () => {
+    // Use a unique port per test to avoid interference between cases
+    let currentPort: number = 0;
+    let portCounter = 0;
+    const nextPort = () => 19400 + (portCounter++);
     it("should create and start basic TCP server", async () => {
         const server = new MqttServer();
-        const config = MqttServer.createBasicConfig(18830); // Use non-standard port for testing
+        currentPort = nextPort();
+        const config = MqttServer.createBasicConfig(currentPort); // Use unique port for testing
 
         assert.strictEqual(server.running, false);
 
         await server.start(config);
         assert.strictEqual(server.running, true);
 
-        // Give the server a moment to fully start listening
-        await new Promise(resolve => setTimeout(resolve, 100));
+    // Wait for server to be ready
+    await waitForPort('127.0.0.1', currentPort);
 
         // Test that the port is actually listening
-        const isListening = await checkPortListening("127.0.0.1", 18830);
-        assert.strictEqual(isListening, true, "Server should be listening on port 18830");
+    const isListening = await checkPortListening("127.0.0.1", currentPort);
+    assert.strictEqual(isListening, true, `Server should be listening on port ${currentPort}`);
 
         await server.stop();
         assert.strictEqual(server.running, false);
@@ -29,7 +35,8 @@ describe("MQTT Server", () => {
 
     it("should allow publishing messages when server is running", async () => {
         const server = new MqttServer();
-        const config = MqttServer.createBasicConfig(18831); // Use different port
+        currentPort = nextPort();
+        const config = MqttServer.createBasicConfig(currentPort); // Use unique port
 
         await server.start(config);
 
@@ -90,7 +97,8 @@ describe("MQTT Server", () => {
 
     it("should prevent starting server twice", async () => {
         const server = new MqttServer();
-        const config = MqttServer.createBasicConfig(18831);
+        currentPort = nextPort();
+        const config = MqttServer.createBasicConfig(currentPort);
 
         await server.start(config);
 
@@ -132,8 +140,9 @@ describe("MQTT Server", () => {
 
         server.close();
 
+        currentPort = nextPort();
         await assert.rejects(
-            () => server.start(MqttServer.createBasicConfig(18832)),
+            () => server.start(MqttServer.createBasicConfig(currentPort)),
             /Deferred.*dropped.*without.*being.*settled/
         );
     });

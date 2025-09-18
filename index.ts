@@ -82,12 +82,46 @@ export interface UnsubscriptionInfo {
  * Hook callback functions for MQTT events
  */
 export interface HookCallbacks {
+  /** Called when a client attempts to authenticate */
+  onClientAuthenticate?: (authRequest: AuthenticationRequest) => AuthenticationResult | Promise<AuthenticationResult>;
   /** Called when a message is published */
   onMessagePublish?: (session: SessionInfo | null, from: MessageFrom, message: MessageInfo) => void;
   /** Called when a client subscribes to a topic */
   onClientSubscribe?: (session: SessionInfo | null, subscription: SubscriptionInfo) => void;
   /** Called when a client unsubscribes from a topic */
   onClientUnsubscribe?: (session: SessionInfo | null, unsubscription: UnsubscriptionInfo) => void;
+}
+
+/**
+ * Authentication request information
+ */
+export interface AuthenticationRequest {
+  /** Client identifier */
+  clientId: string;
+  /** Username provided by client (null for anonymous connections) */
+  username: string | null;
+  /** Password provided by client (null if no password) */
+  password: string | null;
+  /** MQTT protocol version */
+  protocolVersion: number;
+  /** Client remote address */
+  remoteAddr: string;
+  /** Keep alive interval in seconds */
+  keepAlive: number;
+  /** Whether client requested clean session */
+  cleanSession: boolean;
+}
+
+/**
+ * Authentication result
+ */
+export interface AuthenticationResult {
+  /** Whether to allow the connection */
+  allow: boolean;
+  /** Whether the user should have superuser privileges */
+  superuser?: boolean;
+  /** Optional reason for rejection (for logging) */
+  reason?: string;
 }
 
 /**
@@ -176,29 +210,11 @@ export interface ServerConfig {
   listeners: ListenerConfig[];
   /** Optional directory containing plugin configuration files */
   pluginsConfigDir?: string;
+  /** Optional list of plugins to start by default */
+  pluginsDefaultStartups?: string[];
 }
 
-/**
- * Options for creating a multi-protocol server configuration
- */
-export interface MultiProtocolOptions {
-  /** TCP port (default: 1883) */
-  tcpPort?: number;
-  /** TLS port (default: 8883) */
-  tlsPort?: number;
-  /** WebSocket port (default: 8080) */
-  wsPort?: number;
-  /** WebSocket Secure port (default: 8443) */
-  wssPort?: number;
-  /** Bind address (default: "0.0.0.0") */
-  address?: string;
-  /** Path to TLS certificate file */
-  tlsCert?: string;
-  /** Path to TLS private key file */
-  tlsKey?: string;
-  /** Allow anonymous connections (default: true) */
-  allowAnonymous?: boolean;
-}
+// Duplicate MultiProtocolOptions removed; see single definition above
 
 /**
  * MQTT message received from a topic subscription
@@ -288,6 +304,7 @@ export class MqttServer {
    */
   async start(config: ServerConfig): Promise<void> {
     if (this.isRunning) {
+      console.warn("WARN: Attempted to start MQTT server, but it is already running.");
       throw new Error("Server is already running");
     }
 
@@ -306,9 +323,15 @@ export class MqttServer {
         allowAnonymous: listener.allowAnonymous !== false
       })),
       pluginsConfigDir: config.pluginsConfigDir,
+      pluginsDefaultStartups: config.pluginsDefaultStartups,
     };
 
-    await mqttServerStart.call(this.server, normalizedConfig);
+    try {
+      await mqttServerStart.call(this.server, normalizedConfig);
+    } catch (err) {
+      console.error("ERROR: Failed to start MQTT server:", err);
+      throw err;
+    }
     this.isRunning = true;
   }
 
@@ -317,10 +340,16 @@ export class MqttServer {
    */
   async stop(): Promise<void> {
     if (!this.isRunning) {
+      console.warn("WARN: Attempted to stop MQTT server, but it is not running.");
       return;
     }
 
-    await mqttServerStop.call(this.server);
+    try {
+      await mqttServerStop.call(this.server);
+    } catch (err) {
+      console.error("ERROR: Failed to stop MQTT server:", err);
+      throw err;
+    }
     this.isRunning = false;
   }
 
@@ -351,13 +380,19 @@ export class MqttServer {
    */
   async publish(topic: string, payload: string | Buffer, options: { qos?: QoS; retain?: boolean } = {}): Promise<void> {
     if (!this.isRunning) {
+      console.error("ERROR: Attempted to publish while server is not running.");
       throw new Error("Server must be running to publish messages");
     }
 
     const { qos = 0, retain = false } = options;
     const buffer = Buffer.isBuffer(payload) ? payload : Buffer.from(payload, 'utf8');
     
-    await mqttServerPublish.call(this.server, topic, buffer, qos, retain);
+    try {
+      await mqttServerPublish.call(this.server, topic, buffer, qos, retain);
+    } catch (err) {
+      console.error("ERROR: Failed to publish message:", err);
+      throw err;
+    }
   }
 
   /**
@@ -366,10 +401,12 @@ export class MqttServer {
    */
   private _validateConfig(config: ServerConfig): void {
     if (!config || typeof config !== 'object') {
+      console.error("ERROR: Invalid configuration: expected an object.");
       throw new Error("Configuration must be an object");
     }
 
     if (!Array.isArray(config.listeners) || config.listeners.length === 0) {
+      console.error("ERROR: Invalid configuration: at least one listener is required.");
       throw new Error("Configuration must include at least one listener");
     }
 
@@ -383,11 +420,13 @@ export class MqttServer {
       }
 
       if (!listener.protocol || !['tcp', 'tls', 'ws', 'wss'].includes(listener.protocol)) {
+        console.error("ERROR: Invalid listener protocol:", listener.protocol);
         throw new Error("Each listener protocol must be one of: tcp, tls, ws, wss");
       }
 
       if ((listener.protocol === 'tls' || listener.protocol === 'wss')) {
         if (!listener.tlsCert || !listener.tlsKey) {
+          console.error("ERROR: TLS/WSS listeners require both tlsCert and tlsKey");
           throw new Error("TLS/WSS listeners require both tlsCert and tlsKey");
         }
       }

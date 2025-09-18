@@ -1,10 +1,15 @@
 import { describe, it, beforeEach, afterEach } from 'mocha';
 import { expect } from 'chai';
 import { MqttServer, HookCallbacks, MessageInfo, SubscriptionInfo, UnsubscriptionInfo, SessionInfo, MessageFrom } from '../index';
+import { waitForPort } from './helpers';
 import { connect } from 'mqtt';
 
 describe('MQTT Server Hook Callbacks', () => {
     let server: MqttServer;
+    // Use a unique port per test to avoid interference between cases
+    let currentPort: number = 0;
+    let portCounter = 0;
+    const nextPort = () => 19200 + (portCounter++);
 
     beforeEach(() => {
         server = new MqttServer();
@@ -31,15 +36,12 @@ describe('MQTT Server Hook Callbacks', () => {
 
             const hooks: HookCallbacks = {
                 onMessagePublish: (session: SessionInfo | null, from: MessageFrom, message: MessageInfo) => {
-                    console.log('Message published:', message);
                     messagePublishEvents.push({ session, from, message });
                 },
                 onClientSubscribe: (session: SessionInfo | null, subscription: SubscriptionInfo) => {
-                    console.log('Client subscribed:', subscription);
                     subscribeEvents.push({ session, subscription });
                 },
                 onClientUnsubscribe: (session: SessionInfo | null, unsubscription: UnsubscriptionInfo) => {
-                    console.log('Client unsubscribed:', unsubscription);
                     unsubscribeEvents.push({ session, unsubscription });
                 }
             };
@@ -47,22 +49,24 @@ describe('MQTT Server Hook Callbacks', () => {
             // Set up hooks before starting the server
             server.setHooks(hooks);
 
+            // Pick a unique port for this test
+            currentPort = nextPort();
+
             server.start({
                 listeners: [{
                     name: "tcp-test",
                     address: "127.0.0.1",
-                    port: 1883,
+                    port: currentPort,
                     protocol: "tcp",
                     allowAnonymous: true
                 }]
-            }).then(() => {
-                // Give the server a moment to fully start
-                setTimeout(() => {
+            }).then(async () => {
+                // Wait for server to be ready
+                await waitForPort('127.0.0.1', currentPort);
                     // Connect a real MQTT client to trigger hook events
-                    const client = connect('mqtt://127.0.0.1:1883');
+                    const client = connect(`mqtt://127.0.0.1:${currentPort}`);
 
                     client.on('connect', () => {
-                        console.log('Hook test client connected');
                         
                         // Subscribe to a topic (should trigger onClientSubscribe hook)
                         client.subscribe('test/hook/topic', (err) => {
@@ -96,9 +100,9 @@ describe('MQTT Server Hook Callbacks', () => {
                                                         reject(error);
                                                     }
                                                 });
-                                            }, 100);
+                                            }, 60);
                                         });
-                                    }, 200);
+                                    }, 120);
                                 })
                                 .catch((error) => {
                                     clearTimeout(timeout);
@@ -113,7 +117,7 @@ describe('MQTT Server Hook Callbacks', () => {
                         client.end(false, {}, () => {});
                         reject(error);
                     });
-                }, 100);
+                
             }).catch((error) => {
                 clearTimeout(timeout);
                 reject(error);
@@ -127,7 +131,6 @@ describe('MQTT Server Hook Callbacks', () => {
         // Only register some hooks
         const hooks: HookCallbacks = {
             onMessagePublish: (session: SessionInfo | null, from: MessageFrom, message: MessageInfo) => {
-                console.log('Message published:', message);
             }
             // Note: not registering subscribe/unsubscribe hooks
         };
@@ -135,11 +138,14 @@ describe('MQTT Server Hook Callbacks', () => {
         // This should not throw an error
         expect(() => server.setHooks(hooks)).to.not.throw();
 
+        // Pick a unique port for this test
+        currentPort = nextPort();
+
         await server.start({
             listeners: [{
                 name: "tcp-partial",
                 address: "127.0.0.1",
-                port: 1884,
+                port: currentPort,
                 protocol: "tcp",
                 allowAnonymous: true
             }]

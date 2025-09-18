@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-This is a **Neon.js hybrid Rust/TypeScript project** that wraps the high-performance RMQTT Rust MQTT server library for Node.js. The project provides a TypeScript API for creating and managing MQTT brokers with support for multiple protocols (TCP, TLS, WebSocket, WSS) and concurrent connections.
+This is a **Neon.js hybrid Rust/TypeScript project** that wraps the high-performance RMQTT Rust MQTT server library for Node.js. The project provides a comprehensive TypeScript API for creating and managing MQTT brokers with support for multiple protocols (TCP, TLS, WebSocket, WSS), concurrent connections, **pub/sub functionality**, and **real-time event hooks**.
 
 ## Architecture & Key Patterns
 
@@ -11,15 +11,17 @@ This is a **Neon.js hybrid Rust/TypeScript project** that wraps the high-perform
 - **TypeScript side**: `index.ts` wraps native functions in an idiomatic `MqttServer` class with full type safety
 - **Memory management**: Uses `JsBox<MqttServerWrapper>` to safely pass Rust server instances to JavaScript scope
 - **Type definitions**: Native module types defined in `types/` directory for compile-time safety
+- **Hook integration**: JavaScript callbacks stored with `neon::handle::Root<JsFunction>` for real-time MQTT event notifications
 
 ### Async Server Pattern with Threading
 - **Core design**: RMQTT server runs on dedicated Tokio runtime to avoid blocking Node.js event loop
 - **Communication**: Uses `mpsc::channel` for JavaScript→Rust commands and `neon::event::Channel` for Rust→JavaScript callbacks
 - **Server lifecycle**: Supports start/stop operations with graceful shutdown and configuration validation
 - **TypeScript promises**: All async operations return properly typed Promise objects
+- **Context synchronization**: Uses `SharedServerState` with `wait_for_ready()` to ensure server context availability
 
 ```typescript
-// Key pattern: Type-safe server configuration
+// Key pattern: Type-safe server configuration with pub/sub
 const config: ServerConfig = {
   listeners: [{
     name: "tcp",
@@ -29,6 +31,16 @@ const config: ServerConfig = {
   }]
 };
 await server.start(config);
+
+// Pub/Sub API usage
+await server.publish("sensor/data", Buffer.from("temperature: 23.5"));
+
+// Hook system for real-time events
+server.setHooks({
+  onMessagePublish: (session, from, message) => {
+    console.log(`Message: ${message.topic} = ${message.payload.toString()}`);
+  }
+});
 ```
 
 ### MQTT Configuration Pattern
@@ -36,6 +48,14 @@ await server.start(config);
 - **Multi-listener support**: Each listener has protocol (tcp/tls/ws/wss), address, port, and TLS settings
 - **Protocol enforcement**: TypeScript compiler ensures only valid protocols are used
 - **TLS validation**: Runtime validation enforces certificate/key requirements for secure protocols
+
+### Hook System Architecture
+- **RMQTT Integration**: Uses RMQTT's native `Hook` trait with `JavaScriptHookHandler` implementation
+- **Event Types**: Supports `MessagePublish`, `ClientSubscribe`, `ClientUnsubscribe`, and `ClientAuthenticate` events
+- **JavaScript Callbacks**: Stored in global `HookCallbackStorage` with `once_cell::Lazy<Mutex<>>`; only invoked if registered
+- **Parameter Marshaling**: Converts Rust structures to JavaScript objects matching TypeScript interfaces (SessionInfo, MessageFrom, MessageInfo, SubscriptionInfo, UnsubscriptionInfo, AuthenticationRequest/Result)
+- **Hook Registration**: Handlers registered with `hook_register.add()` and enabled with `hook_register.start()`
+- **Auth Semantics**: If JS auth hook returns a decision, it's final; if no JS hook is registered, defer to RMQTT (`proceed = true`). JS auth evaluation uses an internal oneshot with a 5s timeout; on timeout or channel error, deny.
 
 ## Development Workflow
 
@@ -59,9 +79,36 @@ npm run clean
 
 ### Key Dependencies
 - **Rust**: `neon = "1"` (JS bindings), `rmqtt = "0.16"` (MQTT server), `tokio = "1"` (async runtime)
+- **Additional Rust**: `async-trait = "0.1"` (async traits), `once_cell = "1.0"` (global storage), `serde_json = "1.0"` (JSON serialization)
+- **TypeScript**: `typescript = "^5.0.0"`, `@types/node`, `@types/mocha`
+- **Testing**: `mocha` (testing), `chai` (assertions), `mqtt` (real MQTT client for integration tests)
+- **Node.js**: `cargo-cp-artifact` (build artifact copying)
 - **TypeScript**: `typescript = "^5.0.0"`, `@types/node`, `@types/mocha`
 - **Node.js**: `cargo-cp-artifact` (build artifact copying), `mocha` (testing)
 
+## Critical Implementation Details
+
+### TypeScript Compilation Setup
+- **Output directory**: TypeScript compiles from root to `dist/` directory
+- **Native module path**: Compiled JS files reference `dist/index.node`
+- **Type declarations**: Automatic `.d.ts` generation for library consumers
+- **Source maps**: Generated for debugging TypeScript in Node.js
+
+### Server Lifecycle Management
+- **Thread safety**: Each server instance runs on a dedicated Tokio runtime in a separate thread
+- **Type-safe promises**: All async operations return properly typed Promise objects
+- **Resource cleanup**: Call `server.close()` in tests to prevent hanging processes
+- **Readiness in tests**: Use an event-driven port readiness helper (TCP connect) instead of sleeps before client connects
+- **State tracking**: TypeScript class tracks `isRunning` state with getter property
+
+### Configuration Validation
+- **Compile-time**: TypeScript interfaces prevent invalid configuration at compile time
+- **Runtime validation**: Additional checks for TLS requirements and port ranges
+- **Type guards**: Configuration validation with descriptive error messages
+
+### Error Handling Pattern
+- **Typed errors**: Configuration errors thrown as Error objects with specific messages
+- **Promise rejections**: Runtime errors properly typed and converted to Promise rejections
 ## Critical Implementation Details
 
 ### TypeScript Compilation Setup
@@ -85,6 +132,7 @@ npm run clean
 - **Typed errors**: Configuration errors thrown as Error objects with specific messages
 - **Promise rejections**: Runtime errors properly typed and converted to Promise rejections
 - **Channel errors**: Rust communication errors handled via `SendResultExt` trait
+- **Minimal logging**: Only critical WARN/ERROR logs for user-significant failures (invalid QoS, publish failure, auth timeout/channel error)
 
 ### Testing Conventions
 - **TypeScript tests**: Written in TypeScript with full type checking (`test/*.test.ts`)
@@ -107,6 +155,7 @@ npm run clean
 - **Configuration options**: Extend TypeScript interfaces first, then update validation logic
 - **Protocol support**: Update TypeScript protocol union types and Rust protocol matching
 - **Type definitions**: Update interface definitions in TypeScript for compile-time safety
+- **Examples**: When demonstrating auth, prefer a simple JS auth hook (e.g., password === 'demo') and set allowAnonymous: false
 
 ## TypeScript Specific Patterns
 - **Interface exports**: Use `export interface` for configuration types that consumers might need

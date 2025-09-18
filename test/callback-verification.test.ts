@@ -1,10 +1,15 @@
 import { describe, it, beforeEach, afterEach } from 'mocha';
 import { expect } from 'chai';
 import { MqttServer, HookCallbacks } from '../index';
+import { waitForPort } from './helpers';
 import { connect } from 'mqtt';
 
 describe('MQTT JavaScript Hook Callbacks', () => {
     let server: MqttServer;
+    // Use a unique port per test to avoid interference between cases
+    let currentPort: number = 0;
+    let portCounter = 0;
+    const nextPort = () => 19100 + (portCounter++);
 
     beforeEach(() => {
         server = new MqttServer();
@@ -32,24 +37,12 @@ describe('MQTT JavaScript Hook Callbacks', () => {
 
             const hooks: HookCallbacks = {
                 onMessagePublish: (session, from, message) => {
-                    console.log('✅ JavaScript onMessagePublish callback called!', {
-                        topic: message.topic,
-                        payload: message.payload.toString(),
-                        from: from.type
-                    });
                     messagePublishCalled = true;
                 },
                 onClientSubscribe: (session, subscription) => {
-                    console.log('✅ JavaScript onClientSubscribe callback called!', {
-                        topicFilter: subscription.topicFilter,
-                        qos: subscription.qos
-                    });
                     clientSubscribeCalled = true;
                 },
                 onClientUnsubscribe: (session, unsubscription) => {
-                    console.log('✅ JavaScript onClientUnsubscribe callback called!', {
-                        topicFilter: unsubscription.topicFilter
-                    });
                     clientUnsubscribeCalled = true;
                     
                     // Test completion condition: all three callback types have been called
@@ -59,32 +52,33 @@ describe('MQTT JavaScript Hook Callbacks', () => {
                             expect(messagePublishCalled).to.be.true;
                             expect(clientSubscribeCalled).to.be.true;
                             expect(clientUnsubscribeCalled).to.be.true;
-                            console.log('🎉 All JavaScript hook callbacks were successfully invoked!');
                             resolve();
                         } catch (error) {
                             reject(error);
                         }
-                    }, 50);
+                        }, 40);
                 }
             };
 
             // Set up hooks
             server.setHooks(hooks);
 
+            // Pick a unique port for this test
+            currentPort = nextPort();
+
             server.start({
                 listeners: [{
                     name: "tcp-callback-test",
                     address: "127.0.0.1",
-                    port: 1885,
+                    port: currentPort,
                     protocol: "tcp",
                     allowAnonymous: true
                 }]
-            }).then(() => {
-                setTimeout(() => {
-                    const client = connect('mqtt://127.0.0.1:1885');
+            }).then(async () => {
+                await waitForPort('127.0.0.1', currentPort);
+                    const client = connect(`mqtt://127.0.0.1:${currentPort}`);
 
                     client.on('connect', () => {
-                        console.log('Test client connected for callback verification');
                         
                         // Subscribe to trigger onClientSubscribe
                         client.subscribe('test/callback/topic', (err) => {
@@ -104,14 +98,14 @@ describe('MQTT JavaScript Hook Callbacks', () => {
                                             client.unsubscribe('test/callback/topic', () => {
                                                 client.end(false, {}, () => {});
                                             });
-                                        }, 500);
+                                        }, 200);
                                     })
-                                    .catch((error) => {
+                                    .catch((error: any) => {
                                         clearTimeout(timeout);
                                         client.end(false, {}, () => {});
                                         reject(error);
                                     });
-                            }, 300);
+                            }, 150);
                         });
                     });
 
@@ -120,7 +114,7 @@ describe('MQTT JavaScript Hook Callbacks', () => {
                         client.end(false, {}, () => {});
                         reject(error);
                     });
-                }, 200);
+                
             }).catch((error) => {
                 clearTimeout(timeout);
                 reject(error);

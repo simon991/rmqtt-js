@@ -1,9 +1,14 @@
 import { describe, it, beforeEach, afterEach } from 'mocha';
 import { expect } from 'chai';
 import { MqttServer } from '../index';
+import { waitForPort } from './helpers';
 
 describe('Simple Callback Test', () => {
     let server: MqttServer;
+    // Use a unique port per test to avoid interference between cases
+    let currentPort: number = 0;
+    let portCounter = 0;
+    const nextPort = () => 19500 + (portCounter++);
 
     beforeEach(() => {
         server = new MqttServer();
@@ -25,7 +30,6 @@ describe('Simple Callback Test', () => {
             // Set up a simple hook that just sets a flag
             const hooks = {
                 onMessagePublish: () => {
-                    console.log('✅ Simple callback was called!');
                     callbackCalled = true;
                     setTimeout(() => {
                         try {
@@ -34,26 +38,27 @@ describe('Simple Callback Test', () => {
                         } catch (error) {
                             reject(error);
                         }
-                    }, 50);
+                    }, 40);
                 }
             };
 
             server.setHooks(hooks);
             
+            currentPort = nextPort();
+
             server.start({
                 listeners: [{
                     name: "simple-test",
                     address: "127.0.0.1",
-                    port: 1886,
+                    port: currentPort,
                     protocol: "tcp",
                     allowAnonymous: true
                 }]
-            }).then(() => {
-                // Just publish a message to trigger the hook
-                setTimeout(() => {
-                    server.publish('test/simple', Buffer.from('test'))
-                        .catch(reject);
-                }, 200);
+            }).then(async () => {
+                // Wait for server to be ready then publish
+                await waitForPort('127.0.0.1', currentPort);
+                server.publish('test/simple', Buffer.from('test'))
+                    .catch(reject);
             }).catch(reject);
         });
     });
