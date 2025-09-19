@@ -67,7 +67,7 @@ describe('Subscribe Authorization Hook', () => {
           // Now publish to verify we actually receive messages
           client!.once('message', (topic, payload) => {
             try {
-              expect(topic).to.equal('allow/topic');
+              expect(topic).to.equal('alice/topic');
               expect(payload.toString()).to.equal('hello');
               clearTimeout(timeout);
               resolve();
