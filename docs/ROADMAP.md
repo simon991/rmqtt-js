@@ -12,14 +12,6 @@ This roadmap prioritizes features and improvements of this MQTT server (Neon + R
 
 ## P0 — Now
 
-1) Publish authorization hook (ACL + packet mutation)
-- What: expose `authorizePublish` to allow/deny and even mutate outgoing packets (e.g., block `$SYS/`, rewrite payload). We currently only provide subscribe ACL; publish ACL is missing.
-- Scope:
-  - TypeScript API: Add `onClientPublishAuthorize(session, packet) => { allow: boolean; topic?: string; payload?: Buffer; qos?: QoS; reason?: string }` (non-breaking optional).
-  - Rust: Implement decision hook with oneshot + 5s timeout (deny on timeout/channel error). Default-deny `$SYS/` unless explicitly allowed.
-  - Files: `src/rs/hooks.rs`, `src/lib.rs` (hooks mapping), `src/ts/api/hooks.ts`, `src/ts/api/MqttServer.ts` (wiring), tests under `test/` (client publish allow/deny + mutation).
-- Acceptance: Hook can deny/allow client publishes; can mutate payload/topic; `$SYS/` publishes denied by default.
-
 1) Client lifecycle hooks (connect/ready/disconnect/error)
 - What: emit `client`, `clientReady`, `clientDisconnect`, `clientError`, `connectionError`. We currently expose only publish/subscribe events and auth/subscribe ACL.
 - Scope:
@@ -28,7 +20,7 @@ This roadmap prioritizes features and improvements of this MQTT server (Neon + R
   - Files: `src/rs/hooks.rs`, `src/lib.rs`, `src/ts/api/hooks.ts` (types), tests.
 - Acceptance: Hooks fire reliably with minimal payloads (clientId, username, remoteAddr, reason if applicable).
 
-1) Basic metrics and introspection
+2) Basic metrics and introspection
 - What: Expose important metrics such as `connectedClients`. So far, we don’t surface metrics beyond `running`.
 - Scope:
   - TS API: Add `getStats()` returning `{ connectedClients: number; startTime: number; uptimeMs: number; }`.

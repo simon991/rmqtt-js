@@ -1,6 +1,6 @@
 "use strict";
 
-import { MessageFrom, MessageInfo, SessionInfo, SubscriptionInfo, UnsubscriptionInfo } from "./types";
+import { MessageFrom, MessageInfo, MqttMessage, QoS, SessionInfo, SubscriptionInfo, UnsubscriptionInfo } from "./types";
 
 export interface AuthenticationRequest {
   clientId: string;
@@ -24,9 +24,20 @@ export interface SubscribeAuthorizeResult {
   reason?: string;
 }
 
+export interface PublishAuthorizeResult {
+  allow: boolean;
+  // Optional mutation fields
+  topic?: string;
+  payload?: Buffer;
+  // Keep as number to align with existing patterns; recommend using QoS enum
+  qos?: number; // 0 | 1 | 2
+  reason?: string;
+}
+
 export interface HookCallbacks {
   onClientAuthenticate?: (authRequest: AuthenticationRequest) => AuthenticationResult | Promise<AuthenticationResult>;
   onClientSubscribeAuthorize?: (session: SessionInfo | null, subscription: SubscriptionInfo) => SubscribeAuthorizeResult | Promise<SubscribeAuthorizeResult>;
+  onClientPublishAuthorize?: (session: SessionInfo | null, packet: MqttMessage) => PublishAuthorizeResult | Promise<PublishAuthorizeResult>;
   onMessagePublish?: (session: SessionInfo | null, from: MessageFrom, message: MessageInfo) => void;
   onClientSubscribe?: (session: SessionInfo | null, subscription: SubscriptionInfo) => void;
   onClientUnsubscribe?: (session: SessionInfo | null, unsubscription: UnsubscriptionInfo) => void;

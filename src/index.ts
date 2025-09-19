@@ -14,6 +14,7 @@ export type {
   AuthenticationRequest,
   AuthenticationResult,
   SubscribeAuthorizeResult,
+  PublishAuthorizeResult,
   MessagePublishHook,
   ClientSubscribeHook,
   ClientUnsubscribeHook,

@@ -82,6 +82,17 @@ const { MqttServer, QoS } = require("mqtt-server");
 
 Listen to broker events in real time — only invoked if you register them.
 
+### Hooks overview
+
+| Hook                                        | Type                | When it fires        | JS return                                    | Default if not set             | Timeout/error |
+| ------------------------------------------- | ------------------- | -------------------- | -------------------------------------------- | ------------------------------ | ------------- |
+| `onClientAuthenticate(auth)`                | decision            | A client connects    | `{ allow, superuser?, reason? }`             | RMQTT defaults                 | deny          |
+| `onClientSubscribeAuthorize(session, sub)`  | decision            | Client subscribes    | `{ allow, qos?, reason? }`                   | RMQTT defaults                 | deny          |
+| `onClientPublishAuthorize(session, packet)` | decision + mutation | Client publishes     | `{ allow, topic?, payload?, qos?, reason? }` | allow (except `$SYS/*` denied) | deny          |
+| `onMessagePublish(session, from, msg)`      | notification        | Any publish observed | `void`                                       | —                              | —             |
+| `onClientSubscribe(session, sub)`           | notification        | Client subscribes    | `void`                                       | —                              | —             |
+| `onClientUnsubscribe(session, unsub)`       | notification        | Client unsubscribes  | `void`                                       | —                              | —             |
+
 Auth (JS → Rust decision flow)
 ```ts
 server.setHooks({
@@ -103,6 +114,20 @@ server.setHooks({
 });
 ```
 
+Promise-based Subscribe ACL
+```ts
+server.setHooks({
+  onClientSubscribeAuthorize: async (session, sub) => {
+    // e.g., async lookup against a policy service
+    await new Promise(r => setTimeout(r, 50));
+    const user = session?.username ?? "";
+    const allowed = sub.topicFilter.startsWith(`${user}/`);
+    // You can also override QoS (0/1/2); invalid values are ignored and a WARN is logged.
+    return allowed ? { allow: true, qos: 1 } : { allow: false };
+  },
+});
+```
+
 Publish/Subscribe notifications
 ```ts
 server.setHooks({
@@ -114,10 +139,30 @@ server.setHooks({
 });
 ```
 
+Publish ACL with optional mutation
+```ts
+server.setHooks({
+  onClientPublishAuthorize: (session, packet) => {
+    // Deny system topics unless explicitly allowed
+    if (packet.topic.startsWith("$SYS")) {
+      return { allow: false, reason: "system topic" };
+    }
+    // Example: rewrite topic and uppercase payload
+    return {
+      allow: true,
+      topic: `users/${session?.username ?? "anon"}/out`,
+      payload: Buffer.from(packet.payload.toString("utf8").toUpperCase()),
+      qos: 0,
+    };
+  },
+});
+```
+
 Hook semantics:
 - Not registered → not called (RMQTT defaults apply)
 - Auth timeouts or callback errors → deny with WARN
 - Subscribe ACL timeouts or callback errors → deny with WARN
+ - Publish hook: invalid mutation fields (e.g., qos not 0/1/2 or topic with wildcards +/#) are ignored and the original values are used; a WARN is logged.
 
 ## Configuration
 
@@ -203,13 +248,22 @@ export interface MessageInfo { dup: boolean; qos: QoS; retain: boolean; topic: s
 export interface SubscriptionInfo { topicFilter: string; qos: QoS }
 export interface UnsubscriptionInfo { topicFilter: string }
 
+export interface MqttMessage {
+  topic: string;
+  payload: Buffer;
+  qos: QoS;
+  retain: boolean;
+}
+
 export interface AuthenticationRequest { clientId: string; username: string | null; password: string | null; protocolVersion: number; remoteAddr: string; keepAlive: number; cleanSession: boolean; }
 export interface AuthenticationResult { allow: boolean; superuser?: boolean; reason?: string }
 export interface SubscribeAuthorizeResult { allow: boolean; qos?: number; reason?: string }
+export interface PublishAuthorizeResult { allow: boolean; topic?: string; payload?: Buffer; qos?: number; reason?: string }
 
 export interface HookCallbacks {
   onClientAuthenticate?(auth: AuthenticationRequest): AuthenticationResult | Promise<AuthenticationResult>;
   onClientSubscribeAuthorize?(session: SessionInfo | null, sub: SubscriptionInfo): SubscribeAuthorizeResult | Promise<SubscribeAuthorizeResult>;
+  onClientPublishAuthorize?(session: SessionInfo | null, packet: MqttMessage): PublishAuthorizeResult | Promise<PublishAuthorizeResult>;
   onMessagePublish?(session: SessionInfo | null, from: MessageFrom, msg: MessageInfo): void;
   onClientSubscribe?(session: SessionInfo | null, sub: SubscriptionInfo): void;
   onClientUnsubscribe?(session: SessionInfo | null, unsub: UnsubscriptionInfo): void;

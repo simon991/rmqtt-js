@@ -2,7 +2,7 @@ import { describe, it, beforeEach, afterEach } from 'mocha';
 const { expect } = require('chai');
 import * as mqtt from 'mqtt';
 import { MqttServer, ServerConfig } from '../src/index';
-import { waitForPort } from './helpers';
+import { waitForPort, waitForPortClosed } from './helpers';
 
 describe('MQTT Integration Tests', () => {
     let server: MqttServer;
@@ -39,6 +39,13 @@ describe('MQTT Integration Tests', () => {
             });
         }
         if (server) {
+            // stop if running; then ensure port closed
+            if (server.running) {
+                await server.stop();
+                if (currentPort) {
+                    try { await waitForPortClosed('127.0.0.1', currentPort); } catch {}
+                }
+            }
             await server.close();
         }
     });

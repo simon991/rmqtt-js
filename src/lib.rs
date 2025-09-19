@@ -154,6 +154,7 @@ impl MqttServerWrapper {
             if let Ok(Some(on_client_unsubscribe)) = hooks_obj.get_opt::<JsFunction, _, _>(&mut cx, "onClientUnsubscribe") { callbacks.on_client_unsubscribe = Some(on_client_unsubscribe.root(&mut cx)); }
             if let Ok(Some(on_client_authenticate)) = hooks_obj.get_opt::<JsFunction, _, _>(&mut cx, "onClientAuthenticate") { callbacks.on_client_authenticate = Some(on_client_authenticate.root(&mut cx)); }
             if let Ok(Some(on_client_subscribe_authorize)) = hooks_obj.get_opt::<JsFunction, _, _>(&mut cx, "onClientSubscribeAuthorize") { callbacks.on_client_subscribe_authorize = Some(on_client_subscribe_authorize.root(&mut cx)); }
+            if let Ok(Some(on_client_publish_authorize)) = hooks_obj.get_opt::<JsFunction, _, _>(&mut cx, "onClientPublishAuthorize") { callbacks.on_client_publish_authorize = Some(on_client_publish_authorize.root(&mut cx)); }
         }
 
         Ok(cx.undefined())

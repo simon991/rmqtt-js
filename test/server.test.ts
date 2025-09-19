@@ -3,7 +3,7 @@
 import * as assert from "assert";
 import * as net from "net";
 import { MqttServer, ServerConfig } from "../src/index";
-import { waitForPort } from './helpers';
+import { waitForPort, waitForPortClosed } from './helpers';
 
 describe("MQTT Server", () => {
     // Use a unique port per test to avoid interference between cases
@@ -27,7 +27,8 @@ describe("MQTT Server", () => {
     const isListening = await checkPortListening("127.0.0.1", currentPort);
     assert.strictEqual(isListening, true, `Server should be listening on port ${currentPort}`);
 
-        await server.stop();
+    await server.stop();
+    try { await waitForPortClosed('127.0.0.1', currentPort); } catch {}
         assert.strictEqual(server.running, false);
 
         server.close();
@@ -44,7 +45,8 @@ describe("MQTT Server", () => {
         await server.publish("test/topic", "Hello, World!", { qos: 0, retain: false });
         await server.publish("test/topic", Buffer.from("Binary data"), { qos: 1 });
 
-        await server.stop();
+    await server.stop();
+    try { await waitForPortClosed('127.0.0.1', currentPort); } catch {}
         server.close();
     });
 
@@ -107,7 +109,8 @@ describe("MQTT Server", () => {
             /Server is already running/
         );
 
-        await server.stop();
+    await server.stop();
+    try { await waitForPortClosed('127.0.0.1', currentPort); } catch {}
         server.close();
     });
 

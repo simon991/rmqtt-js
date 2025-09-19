@@ -1,7 +1,7 @@
 import { describe, it, beforeEach, afterEach } from 'mocha';
 const { expect } = require('chai');
 import { MqttServer } from '../src/index';
-import { waitForPort } from './helpers';
+import { waitForPort, waitForPortClosed } from './helpers';
 
 describe('Simple Callback Test', () => {
     let server: MqttServer;
@@ -17,6 +17,9 @@ describe('Simple Callback Test', () => {
     afterEach(async () => {
         if (server.running) {
             await server.stop();
+            if (currentPort) {
+                try { await waitForPortClosed('127.0.0.1', currentPort); } catch {}
+            }
         }
         server.close();
     });

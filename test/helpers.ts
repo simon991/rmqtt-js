@@ -10,6 +10,16 @@ export async function waitForPort(host: string, port: number, timeoutMs: number 
   throw new Error(`Port ${host}:${port} not ready within ${timeoutMs}ms`);
 }
 
+export async function waitForPortClosed(host: string, port: number, timeoutMs = 5000, intervalMs: number = 50): Promise<void> {
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    const listening = await isListening(host, port);
+    if (!listening) return;
+    await new Promise((r) => setTimeout(r, intervalMs));
+  }
+  throw new Error(`Port ${port} on ${host} did not close within ${timeoutMs}ms`);
+}
+
 function isListening(host: string, port: number): Promise<boolean> {
   return new Promise((resolve) => {
     const socket = new net.Socket();

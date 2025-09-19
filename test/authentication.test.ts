@@ -1,7 +1,7 @@
 import { describe, it, beforeEach, afterEach } from 'mocha';
 const { expect } = require('chai');
 import { MqttServer, AuthenticationRequest, AuthenticationResult } from '../src/index';
-import { waitForPort } from './helpers';
+import { waitForPort, waitForPortClosed } from './helpers';
 import { connect, MqttClient } from 'mqtt';
 import * as net from 'net';
 
@@ -19,6 +19,10 @@ describe('MQTT Server Authentication', () => {
     afterEach(async () => {
         if (server.running) {
             await server.stop();
+            // ensure the port is actually closed before ending the test
+            if (currentPort) {
+                try { await waitForPortClosed('127.0.0.1', currentPort); } catch {}
+            }
         }
         server.close();
     });
@@ -265,6 +269,75 @@ describe('MQTT Server Authentication', () => {
                 expect(invalidResult.success).to.be.false;
                 resolve();
             }).catch(reject);
+        });
+    });
+
+    it('should allow connections when authentication callback returns a Promise that resolves', async function() {
+        this.timeout(15000);
+
+        return new Promise<void>((resolve, reject) => {
+            currentPort = nextPort();
+            const timeout = setTimeout(() => {
+                reject(new Error('Auth promise resolve test timeout'));
+            }, 12000);
+
+            server.setHooks({
+                onClientAuthenticate: async (_req: AuthenticationRequest): Promise<AuthenticationResult> => {
+                    await new Promise(r => setTimeout(r, 50));
+                    return { allow: true, superuser: false, reason: 'ok' };
+                }
+            });
+
+            server.start({
+                listeners: [{
+                    name: "tcp-auth-promise-allow",
+                    address: "127.0.0.1",
+                    port: currentPort,
+                    protocol: "tcp",
+                    allowAnonymous: false
+                }]
+            }).then(async () => {
+                await waitForPort('127.0.0.1', currentPort);
+
+                const result = await attemptConnection({ clientId: 'promise-allow' }, currentPort);
+                clearTimeout(timeout);
+                expect(result.success).to.be.true;
+                if (result.client) result.client.end();
+                resolve();
+            }).catch(err => { clearTimeout(timeout); reject(err); });
+        });
+    });
+
+    it('should deny connections when authentication callback Promise rejects', async function() {
+        this.timeout(15000);
+
+        return new Promise<void>((resolve, reject) => {
+            currentPort = nextPort();
+            const timeout = setTimeout(() => {
+                reject(new Error('Auth promise reject test timeout'));
+            }, 12000);
+
+            server.setHooks({
+                onClientAuthenticate: async (): Promise<AuthenticationResult> => {
+                    return Promise.reject(new Error('nope')) as any;
+                }
+            });
+
+            server.start({
+                listeners: [{
+                    name: "tcp-auth-promise-deny",
+                    address: "127.0.0.1",
+                    port: currentPort,
+                    protocol: "tcp",
+                    allowAnonymous: false
+                }]
+            }).then(async () => {
+                await waitForPort('127.0.0.1', currentPort);
+                const result = await attemptConnection({ clientId: 'promise-deny' }, currentPort);
+                clearTimeout(timeout);
+                expect(result.success).to.be.false;
+                resolve();
+            }).catch(err => { clearTimeout(timeout); reject(err); });
         });
     });
 

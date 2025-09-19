@@ -184,6 +184,7 @@ impl MqttServerWrapper {
 
         let hook_register = scx.extends.hook_mgr().register();
         hook_register.add(Type::ClientAuthenticate, Box::new(JavaScriptHookHandler::new())).await;
+        hook_register.add(Type::MessagePublishCheckAcl, Box::new(JavaScriptHookHandler::new())).await;
         hook_register.add(Type::MessagePublish, Box::new(JavaScriptHookHandler::new())).await;
         hook_register.add(Type::ClientSubscribeCheckAcl, Box::new(JavaScriptHookHandler::new())).await;
         hook_register.add(Type::ClientSubscribe, Box::new(JavaScriptHookHandler::new())).await;
