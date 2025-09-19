@@ -14,6 +14,7 @@ A high-performance MQTT server for Node.js built with Rust and Neon bindings. Th
 - **Pub/Sub API**: Native publish/subscribe functionality through Rust MQTT server
 - **Real-time Hook System**: Listen to MQTT events (publish, subscribe, unsubscribe) with JavaScript callbacks
 - **Pluggable Authentication**: Implement auth in JavaScript with onClientAuthenticate
+- **Subscribe Authorization**: Allow/deny subscriptions from JavaScript via onClientSubscribeAuthorize
 - **QoS Support**: Full Quality of Service levels (0, 1, 2) for message delivery
 - **Message Retention**: Support for retained messages
 - **Buffer Support**: Native handling of binary message payloads
@@ -120,6 +121,16 @@ const hooks: HookCallbacks = {
     onClientUnsubscribe: (session, unsubscription) => {
         console.log(`Client unsubscribed from: ${unsubscription.topicFilter}`);
     },
+    // Optional: authorize subscriptions with fine-grained control
+    onClientSubscribeAuthorize: (session, subscription) => {
+        // Example policy: user may only subscribe within their namespace or a public area
+        const user = session?.username ?? '';
+        const tf = subscription.topicFilter;
+        const allow = tf.startsWith(`${user}/`) || tf.startsWith('public/');
+        return allow
+            ? { allow: true, qos: QoS.AtLeastOnce } // cap granted QoS to 1
+            : { allow: false, reason: 'Not authorized' };
+    },
     onClientAuthenticate: (auth) => {
         // Allow username with password === 'demo'
         if (auth.username && auth.password === 'demo') return { allow: true, superuser: false };
@@ -129,6 +140,29 @@ const hooks: HookCallbacks = {
 
 // Register the hooks before starting the server
 server.setHooks(hooks);
+## Subscribe Authorization Hook
+
+Use onClientSubscribeAuthorize to control whether a client may subscribe to a topic filter and optionally override the granted QoS:
+
+```ts
+server.setHooks({
+    onClientSubscribeAuthorize: (session, subscription) => {
+        const user = session?.username ?? '';
+        const tf = subscription.topicFilter;
+        if (tf.startsWith(`${user}/`) || tf.startsWith('server/public/')) {
+            return { allow: true, qos: QoS.AtLeastOnce };
+        }
+        return { allow: false, reason: 'Not authorized for topic filter' };
+    }
+});
+```
+
+Behavior:
+- If the hook returns allow: true, the broker will accept the subscription and grant the specified QoS (or the requested QoS if none is provided).
+- If the hook returns allow: false, the subscription is rejected (clients may see an error or a failure code depending on protocol version).
+- If no hook is registered, the decision is deferred to RMQTT’s defaults and configuration.
+- The hook has a 5s internal timeout; timeouts or callback errors result in a deny with a WARN log.
+
 await server.start(MqttServer.createBasicConfig(1883));
 
 // Now the server will call your functions when events occur
@@ -344,6 +378,7 @@ Register event listeners for MQTT events.
   - `onMessagePublish?: (session, from, message) => void` - Called when messages are published
   - `onClientSubscribe?: (session, subscription) => void` - Called when clients subscribe
   - `onClientUnsubscribe?: (session, unsubscription) => void` - Called when clients unsubscribe
+    - `onClientSubscribeAuthorize?: (session, subscription) => { allow: boolean; qos?: QoS; reason?: string } | Promise<...>` - Decide subscribe ACLs
 
 #### Static Methods
 - `MqttServer.createBasicConfig(port, address)` - Create a simple TCP configuration

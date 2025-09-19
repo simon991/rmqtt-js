@@ -84,6 +84,8 @@ export interface UnsubscriptionInfo {
 export interface HookCallbacks {
   /** Called when a client attempts to authenticate */
   onClientAuthenticate?: (authRequest: AuthenticationRequest) => AuthenticationResult | Promise<AuthenticationResult>;
+  /** Called to authorize a client's subscription request; return allow/deny and optional QoS override */
+  onClientSubscribeAuthorize?: (session: SessionInfo | null, subscription: SubscriptionInfo) => SubscribeAuthorizeResult | Promise<SubscribeAuthorizeResult>;
   /** Called when a message is published */
   onMessagePublish?: (session: SessionInfo | null, from: MessageFrom, message: MessageInfo) => void;
   /** Called when a client subscribes to a topic */
@@ -121,6 +123,18 @@ export interface AuthenticationResult {
   /** Whether the user should have superuser privileges */
   superuser?: boolean;
   /** Optional reason for rejection (for logging) */
+  reason?: string;
+}
+
+/**
+ * Result returned from onClientSubscribeAuthorize
+ */
+export interface SubscribeAuthorizeResult {
+  /** Whether to allow the subscription */
+  allow: boolean;
+  /** Optional QoS override to grant (0,1,2) when allowing */
+  qos?: QoS;
+  /** Optional reason for logging when denying */
   reason?: string;
 }
 

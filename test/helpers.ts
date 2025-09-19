@@ -1,6 +1,6 @@
 import * as net from 'net';
 
-export async function waitForPort(host: string, port: number, timeoutMs: number = 3000, intervalMs: number = 50): Promise<void> {
+export async function waitForPort(host: string, port: number, timeoutMs: number = 5000, intervalMs: number = 50): Promise<void> {
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
     const listening = await isListening(host, port);

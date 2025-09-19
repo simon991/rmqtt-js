@@ -95,7 +95,7 @@ async function main() {
         console.log('   mosquitto_pub -h localhost -p 1883 -u alice -P "demo" -t "alice/test" -m "Hello!"');
         console.log('   mosquitto_sub -h localhost -p 1883 -u alice -P "demo" -t "alice/+"');
 
-        // Set up real-time event hooks to monitor MQTT activity
+        // Set up real-time event hooks to monitor MQTT activity and control ACLs
         server.setHooks({
             // Demo authentication hook: allow users when password === "demo".
             // In production, replace with real credential checks (e.g., DB, OAuth, JWT validation, etc.).
@@ -108,6 +108,20 @@ async function main() {
                 }
                 console.log(`Auth ALLOW: clientId=${clientId}, user=${username}, from=${remoteAddr}`);
                 return { allow: true, superuser: false, reason: 'Demo credentials accepted' };
+            },
+            // Subscribe authorization: only allow topics starting with "<username>/" and "server/public/#".
+            // Also cap granted QoS to 1.
+            onClientSubscribeAuthorize: (session, subscription) => {
+                const user = session?.username ?? '';
+                const tf = subscription.topicFilter;
+                console.log(`SUB REQUEST: user=${user} filter=${tf} (requested QoS ${subscription.qos})`);
+                const allow = tf.startsWith(`${user}/`) || tf.startsWith('server/public/');
+                if (!allow) {
+                    console.warn(`SUB DENY: user=${user} filter=${tf}`);
+                    return { allow: false, reason: 'Not authorized for topic filter' };
+                }
+                console.log(`SUB ALLOW: user=${user} filter=${tf} (QoS<=1)`);
+                return { allow: true, qos: QoS.AtLeastOnce };
             },
             onMessagePublish: (session, from, message) => {
                 console.log(`📨 Message published to "${message.topic}": ${message.payload.toString()}`);
@@ -149,6 +163,15 @@ async function main() {
         console.log(`   - Address: 0.0.0.0:1883`);
         console.log(`   - Anonymous connections: disabled`);
         console.log(`   - Real-time event hooks: active`);
+
+    console.log('\n🔒 Subscribe ACL demo:');
+    console.log('   - Allowed: username "alice" -> topics "alice/#" and "server/public/#"');
+    console.log('   - Denied: any other topic filters');
+    console.log('   - Granted QoS is capped to 1 even if client requests 2');
+    console.log('\nTry:');
+    console.log('   mosquitto_sub -h localhost -p 1883 -u alice -P "demo" -t "alice/#"');
+    console.log('   mosquitto_sub -h localhost -p 1883 -u alice -P "demo" -t "server/public/#"');
+    console.log('   mosquitto_sub -h localhost -p 1883 -u alice -P "demo" -t "server/secret/#"   # should be denied');
 
         // Log server status
         console.log(`\n📊 Server status: ${server.running ? 'Running' : 'Stopped'}`);

@@ -30,6 +30,7 @@ struct HookCallbackStorage {
     on_client_subscribe: Option<neon::handle::Root<JsFunction>>,
     on_client_unsubscribe: Option<neon::handle::Root<JsFunction>>,
     on_client_authenticate: Option<neon::handle::Root<JsFunction>>,
+    on_client_subscribe_authorize: Option<neon::handle::Root<JsFunction>>,
 }
 
 impl HookCallbackStorage {
@@ -40,6 +41,7 @@ impl HookCallbackStorage {
             on_client_subscribe: None,
             on_client_unsubscribe: None,
             on_client_authenticate: None,
+            on_client_subscribe_authorize: None,
         }
     }
 
@@ -49,6 +51,7 @@ impl HookCallbackStorage {
         self.on_client_subscribe = None;
         self.on_client_unsubscribe = None;
         self.on_client_authenticate = None;
+        self.on_client_subscribe_authorize = None;
     }
 }
 
@@ -59,6 +62,14 @@ type ServerCallback = Box<dyn FnOnce(&Channel, Deferred) + Send>;
 pub struct AuthenticationResult {
     pub allow: bool,
     pub superuser: bool,
+    pub reason: Option<String>,
+}
+
+// Subscription authorization result structure from JavaScript
+#[derive(Debug, Clone)]
+pub struct SubscribeDecision {
+    pub allow: bool,
+    pub qos: Option<u8>,
     pub reason: Option<String>,
 }
 
@@ -244,7 +255,7 @@ impl JavaScriptHookHandler {
                                         if let Ok(data_value) =
                                             serde_json::from_str::<serde_json::Value>(&data_json)
                                         {
-                                            // Create session parameter (null for system messages)
+                                            // Create session parameter (not available here yet, use null)
                                             let session = cx.null();
 
                                             // Create from parameter (simplified for now)
@@ -313,7 +324,7 @@ impl JavaScriptHookHandler {
                                         if let Ok(data_value) =
                                             serde_json::from_str::<serde_json::Value>(&data_json)
                                         {
-                                            // Create session parameter (null for now - we don't have session info)
+                                            // Create session parameter (not available here yet, use null)
                                             let session = cx.null();
 
                                             // Create subscription parameter
@@ -349,7 +360,7 @@ impl JavaScriptHookHandler {
                                         if let Ok(data_value) =
                                             serde_json::from_str::<serde_json::Value>(&data_json)
                                         {
-                                            // Create session parameter (null for now)
+                                            // Create session parameter (not available here yet, use null)
                                             let session = cx.null();
 
                                             // Create unsubscription parameter
@@ -607,6 +618,192 @@ impl JavaScriptHookHandler {
         // No authentication callback registered - let RMQTT handle authentication normally
         return (true, None);
     }
+
+    async fn call_js_subscribe_acl_hook(
+        &self,
+        session: &rmqtt::session::Session,
+        subscribe: &rmqtt::types::Subscribe,
+    ) -> ReturnType {
+        // Check if we have an authorization callback registered for subscribe ACL
+        let (has_callback, channel_available) = {
+            if let Ok(callbacks) = HOOK_CALLBACKS.lock() {
+                (
+                    callbacks.on_client_subscribe_authorize.is_some(),
+                    callbacks.channel.is_some(),
+                )
+            } else {
+                (false, false)
+            }
+        };
+
+        if has_callback && channel_available {
+            use rmqtt::codec::v5::SubscribeAckReason;
+            use rmqtt::types::QoS as RmQos;
+            use rmqtt::types::SubscribeAclResult;
+
+            let (tx, rx) = oneshot::channel::<SubscribeDecision>();
+
+            // Prepare subscription info for JS
+            let data = serde_json::json!({
+                "topicFilter": subscribe.topic_filter.to_string(),
+                "qos": subscribe.opts.qos() as u8
+            });
+            let data_json = data.to_string();
+
+            // Capture session info for JS (remoteAddr, clientId, username)
+            let sess_info = {
+                let id = session.id();
+                serde_json::json!({
+                    "remoteAddr": id.remote_addr.map(|a| a.to_string()),
+                    "clientId": id.client_id,
+                    "username": session.username().map(|u| u.to_string())
+                })
+            };
+            let sess_json = sess_info.to_string();
+
+            let channel = {
+                if let Ok(callbacks) = HOOK_CALLBACKS.lock() {
+                    callbacks.channel.clone()
+                } else {
+                    None
+                }
+            };
+
+            if let Some(channel) = channel {
+                let send_result = channel.try_send(move |mut cx| {
+                    if let Ok(callbacks) = HOOK_CALLBACKS.lock() {
+                        if let Some(callback_root) = &callbacks.on_client_subscribe_authorize {
+                            let callback = callback_root.to_inner(&mut cx);
+
+                            if let Ok(data_value) =
+                                serde_json::from_str::<serde_json::Value>(&data_json)
+                            {
+                                // Build session value (object or null)
+                                let session: Handle<JsValue> = if let Ok(sess_val) = serde_json::from_str::<serde_json::Value>(&sess_json) {
+                                    let s = cx.empty_object();
+                                    // remoteAddr
+                                    if let Some(remote) = sess_val.get("remoteAddr").and_then(|v| v.as_str()) {
+                                        let v = cx.string(remote);
+                                        s.set(&mut cx, "remoteAddr", v)?;
+                                    } else {
+                                        let v = cx.null();
+                                        s.set(&mut cx, "remoteAddr", v)?;
+                                    }
+                                    // clientId
+                                    if let Some(cid) = sess_val.get("clientId").and_then(|v| v.as_str()) {
+                                        let v = cx.string(cid);
+                                        s.set(&mut cx, "clientId", v)?;
+                                    }
+                                    // username
+                                    if let Some(user) = sess_val.get("username").and_then(|v| v.as_str()) {
+                                        let v = cx.string(user);
+                                        s.set(&mut cx, "username", v)?;
+                                    } else {
+                                        let v = cx.null();
+                                        s.set(&mut cx, "username", v)?;
+                                    }
+                                    s.upcast()
+                                } else { cx.null().upcast() };
+                                let subscription = cx.empty_object();
+                                if let Some(topic_filter) = data_value
+                                    .get("topicFilter")
+                                    .and_then(|v| v.as_str())
+                                {
+                                    let v = cx.string(topic_filter);
+                                    subscription.set(&mut cx, "topicFilter", v)?;
+                                }
+                                if let Some(qos) = data_value.get("qos").and_then(|v| v.as_u64()) {
+                                    let v = cx.number(qos as f64);
+                                    subscription.set(&mut cx, "qos", v)?;
+                                }
+
+                                // Call the JS function expecting { allow: boolean, qos?: number, reason?: string }
+                                let result = callback
+                                    .call_with(&cx)
+                                    .arg(session)
+                                    .arg(subscription)
+                                    .apply::<JsObject, _>(&mut cx)?;
+
+                                let allow = result
+                                    .get::<JsBoolean, _, _>(&mut cx, "allow")?
+                                    .value(&mut cx);
+                                let qos = result
+                                    .get_opt::<JsNumber, _, _>(&mut cx, "qos")?
+                                    .map(|n| n.value(&mut cx) as u8);
+                                let reason = result
+                                    .get_opt::<JsString, _, _>(&mut cx, "reason")?
+                                    .map(|s| s.value(&mut cx));
+
+                                let _ = tx.send(SubscribeDecision { allow, qos, reason });
+                            }
+                        }
+                    }
+                    Ok(())
+                });
+
+                match send_result {
+                    Ok(_) => match tokio::time::timeout(Duration::from_millis(5000), rx).await {
+                        Ok(Ok(decision)) => {
+                            if decision.allow {
+                                let qos_num = decision.qos.unwrap_or(subscribe.opts.qos() as u8);
+                                let qos = match RmQos::try_from(qos_num) {
+                                    Ok(q) => q,
+                                    Err(_) => subscribe.opts.qos(),
+                                };
+                                return (
+                                    false,
+                                    Some(HookResult::SubscribeAclResult(SubscribeAclResult::new_success(qos, None))),
+                                );
+                            } else {
+                                return (
+                                    false,
+                                    Some(HookResult::SubscribeAclResult(SubscribeAclResult::new_failure(
+                                        SubscribeAckReason::NotAuthorized,
+                                    ))),
+                                );
+                            }
+                        }
+                        Ok(Err(_)) => {
+                            eprintln!(
+                                "WARN: Subscribe ACL callback channel error; denying subscription"
+                            );
+                            return (
+                                false,
+                                Some(HookResult::SubscribeAclResult(SubscribeAclResult::new_failure(
+                                    SubscribeAckReason::NotAuthorized,
+                                ))),
+                            );
+                        }
+                        Err(_) => {
+                            eprintln!(
+                                "WARN: Subscribe ACL callback timed out; denying subscription"
+                            );
+                            return (
+                                false,
+                                Some(HookResult::SubscribeAclResult(SubscribeAclResult::new_failure(
+                                    SubscribeAckReason::NotAuthorized,
+                                ))),
+                            );
+                        }
+                    },
+                    Err(_) => {
+                        eprintln!(
+                            "WARN: Failed to dispatch subscribe ACL request to JavaScript; denying subscription"
+                        );
+                        return (
+                            false,
+                            Some(HookResult::SubscribeAclResult(SubscribeAclResult::new_failure(
+                                SubscribeAckReason::NotAuthorized,
+                            ))),
+                        );
+                    }
+                }
+            }
+        }
+
+        // No JS hook registered; proceed and let RMQTT/other ACL decide
+        (true, None)
+    }
 }
 
 #[async_trait]
@@ -632,6 +829,9 @@ impl Handler for JavaScriptHookHandler {
                     "qos": subscribe.opts.qos() as u8
                 });
                 self.call_js_hook("client_subscribe", data);
+            }
+            Parameter::ClientSubscribeCheckAcl(session, subscribe) => {
+                return self.call_js_subscribe_acl_hook(session, subscribe).await;
             }
             Parameter::ClientUnsubscribe(_session, unsubscribe) => {
                 // Call JavaScript callback if registered
@@ -883,6 +1083,12 @@ impl MqttServerWrapper {
             .await;
         hook_register
             .add(Type::MessagePublish, Box::new(JavaScriptHookHandler::new()))
+            .await;
+        hook_register
+            .add(
+                Type::ClientSubscribeCheckAcl,
+                Box::new(JavaScriptHookHandler::new()),
+            )
             .await;
         hook_register
             .add(
@@ -1172,6 +1378,13 @@ impl MqttServerWrapper {
                 hooks_obj.get_opt::<JsFunction, _, _>(&mut cx, "onClientAuthenticate")
             {
                 callbacks.on_client_authenticate = Some(on_client_authenticate.root(&mut cx));
+            }
+
+            if let Ok(Some(on_client_subscribe_authorize)) =
+                hooks_obj.get_opt::<JsFunction, _, _>(&mut cx, "onClientSubscribeAuthorize")
+            {
+                callbacks.on_client_subscribe_authorize =
+                    Some(on_client_subscribe_authorize.root(&mut cx));
             }
         }
 
