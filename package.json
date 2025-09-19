@@ -5,11 +5,11 @@
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "scripts": {
-    "build": "npm run build:native && npm run build:ts",
+    "build": "npm run clean && npm run build:native && npm run build:ts",
     "build:native": "cargo-cp-artifact -nc dist/index.node -- cargo build --message-format=json-render-diagnostics",
     "build:ts": "tsc",
     "install": "npm run build",
-    "test": "npm run build:ts && mocha dist/test/**/*.test.js",
+  "test": "npm run build:native && mocha --require ts-node/register \"test/**/*.test.ts\"",
     "clean": "rm -rf dist",
     "prepublishOnly": "npm run clean && npm run build",
     "example": "npm run build && node examples/simple-server.ts --experimental-strip-types"
@@ -24,7 +24,8 @@
     "chai": "^6.0.1",
     "mocha": "^10.0.0",
     "mqtt": "^5.14.1",
-    "typescript": "^5.9.2"
+    "typescript": "^5.9.2",
+    "ts-node": "^10.9.2"
   },
   "repository": {
     "type": "git",

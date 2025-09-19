@@ -1,6 +1,7 @@
 "use strict";
 
 import { HookCallbacks } from "../api/hooks";
+import path from "path";
 
 interface NativeModule {
   mqttServerNew(): unknown;
@@ -12,10 +13,24 @@ interface NativeModule {
 }
 
 // CJS require is necessary for neon native addon
-// When compiled, this file lives at dist/src/ts/native/bridge.js
-// The native addon is emitted to dist/index.node, hence the '../../../'
-// eslint-disable-next-line @typescript-eslint/no-var-requires
-const nativeModule = require("../../../index.node") as NativeModule;
+// This code must work in two scenarios:
+// 1) Compiled output at dist/src/ts/native/bridge.js, with addon at dist/index.node
+// 2) ts-node executing the source at src/ts/native/bridge.ts, with addon at dist/index.node
+// We try both locations in order.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let nativeModule: any;
+{
+  const candidates = [
+    path.join(__dirname, "../../../index.node"), // compiled layout (dist)
+    path.join(__dirname, "../../../dist/index.node"), // ts-node layout (source)
+  ];
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const tryRequire = (p: string) => { try { return require(p); } catch { return undefined; } };
+  for (const c of candidates) { nativeModule = tryRequire(c); if (nativeModule) break; }
+  if (!nativeModule) {
+    throw new Error(`Failed to load native addon (index.node). Tried: ${candidates.join(", ")}`);
+  }
+}
 
 export const {
   mqttServerNew,

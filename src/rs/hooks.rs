@@ -49,7 +49,6 @@ impl HookCallbackStorage {
 pub struct AuthenticationResult {
     pub allow: bool,
     pub superuser: bool,
-    pub reason: Option<String>,
 }
 
 // Subscription authorization result structure from JavaScript
@@ -57,7 +56,6 @@ pub struct AuthenticationResult {
 pub struct SubscribeDecision {
     pub allow: bool,
     pub qos: Option<u8>,
-    pub reason: Option<String>,
 }
 
 // Removed unused hook data structures to keep module lean
@@ -265,9 +263,7 @@ impl JavaScriptHookHandler {
 
                                 let allow = result.get::<JsBoolean, _, _>(&mut cx, "allow")?.value(&mut cx);
                                 let superuser = result.get_opt::<JsBoolean, _, _>(&mut cx, "superuser")?.map(|b| b.value(&mut cx)).unwrap_or(false);
-                                let reason = result.get_opt::<JsString, _, _>(&mut cx, "reason")?.map(|s| s.value(&mut cx));
-
-                                let _ = tx.send(AuthenticationResult { allow, superuser, reason });
+                                let _ = tx.send(AuthenticationResult { allow, superuser });
                             }
                         }
                     }
@@ -390,9 +386,7 @@ impl JavaScriptHookHandler {
                                 let result = callback.call_with(&cx).arg(session).arg(subscription).apply::<JsObject, _>(&mut cx)?;
                                 let allow = result.get::<JsBoolean, _, _>(&mut cx, "allow")?.value(&mut cx);
                                 let qos = result.get_opt::<JsNumber, _, _>(&mut cx, "qos")?.map(|n| n.value(&mut cx) as u8);
-                                let reason = result.get_opt::<JsString, _, _>(&mut cx, "reason")?.map(|s| s.value(&mut cx));
-
-                                let _ = tx.send(SubscribeDecision { allow, qos, reason });
+                                let _ = tx.send(SubscribeDecision { allow, qos });
                             }
                         }
                     }
@@ -470,3 +464,5 @@ impl Handler for JavaScriptHookHandler {
         (true, acc)
     }
 }
+// moved from src/hooks.rs
+// ... file contents preserved ...

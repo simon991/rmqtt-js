@@ -1,6 +1,6 @@
 import { describe, it, beforeEach, afterEach } from 'mocha';
-import { expect } from 'chai';
-import { MqttServer } from '../index';
+const { expect } = require('chai');
+import { MqttServer } from '../src/index';
 import { waitForPort } from './helpers';
 
 describe('Simple Callback Test', () => {

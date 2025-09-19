@@ -1,12 +1,12 @@
 "use strict";
 
-// Barrel exports for the public API
+// Barrel exports for the public API (now colocated in src)
 
 // Core server class
-export { MqttServer } from "./src/ts/api/MqttServer";
+export { MqttServer } from "./ts/api/MqttServer";
 
 // Config types
-export type { ServerConfig, ListenerConfig } from "./src/ts/api/config";
+export type { ServerConfig, ListenerConfig } from "./ts/api/config";
 
 // Hook-related types
 export type {
@@ -18,13 +18,10 @@ export type {
   ClientSubscribeHook,
   ClientUnsubscribeHook,
   MessageDeliveredHook,
-} from "./src/ts/api/hooks";
+} from "./ts/api/hooks";
 
 // Public data types
-export {
-  QoS,
-} from "./src/ts/api/types";
-
+export { QoS } from "./ts/api/types";
 export type {
   SessionInfo,
   MessageFrom,
@@ -35,8 +32,8 @@ export type {
   SubscribeOptions,
   PublishOptions,
   MultiProtocolOptions,
-} from "./src/ts/api/types";
+} from "./ts/api/types";
 
 // Default export for CommonJS consumers
-import { MqttServer as _MqttServerDefault } from "./src/ts/api/MqttServer";
+import { MqttServer as _MqttServerDefault } from "./ts/api/MqttServer";
 export default _MqttServerDefault;

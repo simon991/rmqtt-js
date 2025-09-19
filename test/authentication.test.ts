@@ -1,6 +1,6 @@
 import { describe, it, beforeEach, afterEach } from 'mocha';
-import { expect } from 'chai';
-import { MqttServer, AuthenticationRequest, AuthenticationResult } from '../index';
+const { expect } = require('chai');
+import { MqttServer, AuthenticationRequest, AuthenticationResult } from '../src/index';
 import { waitForPort } from './helpers';
 import { connect, MqttClient } from 'mqtt';
 import * as net from 'net';

@@ -2,7 +2,7 @@
 
 import * as assert from "assert";
 import * as net from "net";
-import { MqttServer, ServerConfig } from "../index";
+import { MqttServer, ServerConfig } from "../src/index";
 import { waitForPort } from './helpers';
 
 describe("MQTT Server", () => {

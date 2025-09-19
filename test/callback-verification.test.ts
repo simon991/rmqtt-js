@@ -1,6 +1,6 @@
 import { describe, it, beforeEach, afterEach } from 'mocha';
-import { expect } from 'chai';
-import { MqttServer, HookCallbacks } from '../index';
+const { expect } = require('chai');
+import { MqttServer, HookCallbacks } from '../src/index';
 import { waitForPort } from './helpers';
 import { connect } from 'mqtt';
 

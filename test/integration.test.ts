@@ -1,7 +1,7 @@
 import { describe, it, beforeEach, afterEach } from 'mocha';
-import { expect } from 'chai';
+const { expect } = require('chai');
 import * as mqtt from 'mqtt';
-import { MqttServer, ServerConfig } from '../index';
+import { MqttServer, ServerConfig } from '../src/index';
 import { waitForPort } from './helpers';
 
 describe('MQTT Integration Tests', () => {

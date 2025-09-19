@@ -2,11 +2,9 @@ use neon::prelude::*;
 use neon::types::buffer::TypedArray;
 use std::collections::HashMap;
 
+mod rs;
 
-mod hooks;
-mod server;
-
-use server::{MqttServerWrapper, SendResultExt, ServerConfig};
+use rs::{MqttServerWrapper, SendResultExt, ServerConfig};
 
 // JavaScript-exposed methods
 impl MqttServerWrapper {
@@ -108,7 +106,7 @@ impl MqttServerWrapper {
                 .map(|b| b.value(cx))
                 .unwrap_or(true);
 
-            listeners.push(server::ListenerConfig {
+            listeners.push(rs::ListenerConfig {
                 name,
                 address,
                 port,
@@ -149,7 +147,7 @@ impl MqttServerWrapper {
     fn js_set_hooks(mut cx: FunctionContext) -> JsResult<JsUndefined> {
         let hooks_obj = cx.argument::<JsObject>(0)?;
         let channel = cx.channel();
-        if let Ok(mut callbacks) = crate::hooks::HOOK_CALLBACKS.lock() {
+        if let Ok(mut callbacks) = crate::rs::HOOK_CALLBACKS.lock() {
             callbacks.channel = Some(channel);
             if let Ok(Some(on_message_publish)) = hooks_obj.get_opt::<JsFunction, _, _>(&mut cx, "onMessagePublish") { callbacks.on_message_publish = Some(on_message_publish.root(&mut cx)); }
             if let Ok(Some(on_client_subscribe)) = hooks_obj.get_opt::<JsFunction, _, _>(&mut cx, "onClientSubscribe") { callbacks.on_client_subscribe = Some(on_client_subscribe.root(&mut cx)); }

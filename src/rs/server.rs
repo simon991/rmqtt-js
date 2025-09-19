@@ -16,7 +16,7 @@ use rmqtt::{
     Result as RmqttResult,
 };
 
-use crate::hooks::{JavaScriptHookHandler, HOOK_CALLBACKS};
+use crate::rs::hooks::{JavaScriptHookHandler, HOOK_CALLBACKS};
 
 // Shared server state to enable publishing and hook callbacks
 #[derive(Clone)]
@@ -269,3 +269,5 @@ impl SendResultExt for Result<(), mpsc::SendError<ServerMessage>> {
         })
     }
 }
+// moved from src/server.rs
+// ... file contents preserved ...
