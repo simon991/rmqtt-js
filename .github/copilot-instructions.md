@@ -57,114 +57,175 @@ server.setHooks({
 - **Hook Registration**: Handlers registered with `hook_register.add()` and enabled with `hook_register.start()`
 - **Auth Semantics**: If JS auth hook returns a decision, it's final; if no JS hook is registered, defer to RMQTT (`proceed = true`). JS auth evaluation uses an internal oneshot with a 5s timeout; on timeout or channel error, deny.
 
-## Development Workflow
+# Repository custom instructions for GitHub Copilot
 
-### Build & Test Commands
-```bash
-# Build both native module and TypeScript
-npm run build
+These instructions tell Copilot how to work effectively in this repository. They apply to Copilot Chat, the Copilot coding agent, and Copilot code review.
 
-# Build only native module (Rust → index.node)
-npm run build:native
+Trust these instructions first. Only search the codebase or the web if the information here is incomplete or appears incorrect.
 
-# Build only TypeScript (src → dist/)
-npm run build:ts
+## Project overview
 
-# Run tests (TypeScript compiled to dist/ first)
-npm test
+- Purpose: High-performance MQTT broker for Node.js with a typed TypeScript API, powered by Rust RMQTT and Neon.
+- Stack: TypeScript (Node.js), Rust (Tokio, RMQTT), Neon for JS <-> Rust bridge.
+- Output: Node package exposing `MqttServer` with multi-protocol listeners, publish API, and real-time hooks.
+- Primary entry points:
+  - TypeScript public API: `src/index.ts`, `src/ts/api/MqttServer.ts`
+  - Rust native module: `src/lib.rs`, with implementation in `src/rs/*.rs`
+  - Native bridge loader: `src/ts/native/bridge.ts` (loads `dist/index.node`)
+- Example: `examples/simple-server.ts`
+- Tests: `test/*.test.ts` use Mocha, run against real ports.
 
-# Clean build artifacts
-npm run clean
-```
+## How to build, test, and run
 
-### Key Dependencies
-- **Rust**: `neon = "1"` (JS bindings), `rmqtt = "0.16"` (MQTT server), `tokio = "1"` (async runtime)
-- **Additional Rust**: `async-trait = "0.1"` (async traits), `once_cell = "1.0"` (global storage), `serde_json = "1.0"` (JSON serialization)
-- **TypeScript**: `typescript = "^5.0.0"`, `@types/node`, `@types/mocha`
-- **Testing**: `mocha` (testing), `chai` (assertions), `mqtt` (real MQTT client for integration tests)
-- **Node.js**: `cargo-cp-artifact` (build artifact copying)
-- **TypeScript**: `typescript = "^5.0.0"`, `@types/node`, `@types/mocha`
-- **Node.js**: `cargo-cp-artifact` (build artifact copying), `mocha` (testing)
+- Node: 18+ recommended (engines allow >=14). Rust toolchain required.
+- Build all (native + TS):
+  - `npm run build` (cleans, builds native via Cargo, then compiles TS to `dist/`)
+- Build native only:
+  - `npm run build:native` (produces `dist/index.node` via cargo-cp-artifact)
+- Build TS only:
+  - `npm run build:ts` (compiles TS under `src/` to `dist/`)
+- Run tests:
+  - `npm test` (builds native, then runs Mocha on `test/**/*.test.ts` with ts-node)
+- Example app:
+  - `npm run example` (build then run `examples/simple-server.ts`)
 
-## Critical Implementation Details
+Important runtime artifact paths:
+- Compiled JS: `dist/index.js`
+- Native addon: `dist/index.node`
+- The loader in `src/ts/native/bridge.ts` tries both `../../../index.node` and `../../../dist/index.node` relative to the compiled layout. Do not change these without updating both paths.
 
-### TypeScript Compilation Setup
-- **Output directory**: TypeScript compiles from root to `dist/` directory
-- **Native module path**: Compiled JS files reference `dist/index.node`
-- **Type declarations**: Automatic `.d.ts` generation for library consumers
-- **Source maps**: Generated for debugging TypeScript in Node.js
+## Repository structure (what goes where)
 
-### Server Lifecycle Management
-- **Thread safety**: Each server instance runs on a dedicated Tokio runtime in a separate thread
-- **Type-safe promises**: All async operations return properly typed Promise objects
-- **Resource cleanup**: Call `server.close()` in tests to prevent hanging processes
-- **Readiness in tests**: Use an event-driven port readiness helper (TCP connect) instead of sleeps before client connects
-- **State tracking**: TypeScript class tracks `isRunning` state with getter property
+- `src/index.ts` — Public API barrel (exports classes and types)
+- `src/ts/api/MqttServer.ts` — TypeScript class that wraps native functions and enforces runtime validation
+- `src/ts/api/*.ts` — Config, hooks, and public types for consumers
+- `src/ts/native/bridge.ts` — Loads the Neon addon and exposes typed native calls
+- `src/ts/utils/validators.ts` — Runtime config validation
+- `src/lib.rs` — Neon module: exports functions to JS and marshals TS <-> Rust types
+- `src/rs/server.rs` — RMQTT server lifecycle, Tokio runtime thread, publish pipeline
+- `src/rs/hooks.rs` — Hook bridging to JS (auth, subscribe ACL, publish/subscribe/unsubscribe notifications)
+- `test/*.test.ts` — Mocha tests (port readiness helpers; ensure cleanup)
+- `examples/simple-server.ts` — End-to-end demo including hooks and server-side publish
 
-### Configuration Validation
-- **Compile-time**: TypeScript interfaces prevent invalid configuration at compile time
-- **Runtime validation**: Additional checks for TLS requirements and port ranges
-- **Type guards**: Configuration validation with descriptive error messages
+## Architecture notes (keep these consistent)
 
-### Error Handling Pattern
-- **Typed errors**: Configuration errors thrown as Error objects with specific messages
-- **Promise rejections**: Runtime errors properly typed and converted to Promise rejections
-## Critical Implementation Details
+- Rust <-> TS bridge pattern
+  - Rust exports Neon functions from `lib.rs` (e.g., `mqttServerStart`, `mqttServerPublish`) bound to methods on `MqttServerWrapper`.
+  - TypeScript imports these via `src/ts/native/bridge.ts` and wraps them in `MqttServer`.
+  - Memory safety via `JsBox<MqttServerWrapper>`; JS holds a box that owns the server channel/runtime.
+- Async + threading
+  - A dedicated Tokio runtime runs the RMQTT server on a background thread.
+  - A channel (`mpsc`) handles JS→Rust commands; a Neon event `Channel` handles Rust→JS callbacks.
+  - `SharedServerState.wait_for_ready()` gates publish calls until context is available (5s timeout in publish path).
+- Hooks
+  - Supported: `onClientAuthenticate`, `onClientSubscribeAuthorize`, `onMessagePublish`, `onClientSubscribe`, `onClientUnsubscribe`.
+  - JS callback registration lives in `lib.rs::js_set_hooks` and stored in `HOOK_CALLBACKS` (see `src/rs/hooks.rs`).
+  - Auth/Subscribe ACL decisions use oneshot with 5s timeout; timeout or channel error → deny with WARN. If no JS hook is registered, defer to RMQTT defaults.
+- Logging & errors
+  - Keep logs minimal and actionable: WARN/ERROR only for user‑significant events.
+  - Prefer typed errors to `throw` with clear messages; TypeScript path rejects promises on failures.
 
-### TypeScript Compilation Setup
-- **Output directory**: TypeScript compiles from root to `dist/` directory
-- **Native module path**: Compiled JS files reference `dist/index.node`
-- **Type declarations**: Automatic `.d.ts` generation for library consumers
-- **Source maps**: Generated for debugging TypeScript in Node.js
+## Coding standards and preferences for Copilot
 
-### Server Lifecycle Management
-- **Thread safety**: Each server instance runs on a dedicated Tokio runtime in a separate thread
-- **Type-safe promises**: All async operations return properly typed Promise objects
-- **Resource cleanup**: Call `server.close()` in tests to prevent hanging processes
-- **State tracking**: TypeScript class tracks `isRunning` state with getter property
+- TypeScript
+  - Target CommonJS, strict mode (see `tsconfig.json`). Prefer `enum` for protocol/QoS and `export interface` for configs and hook payloads.
+  - Avoid reformatting unrelated code; keep diffs minimal and localized.
+  - Validate inputs at API boundaries (`validateServerConfig`). Clear, user‑facing error messages.
+  - When adding options/types, update both compile-time interfaces and runtime validation.
+- Rust (Neon + RMQTT)
+  - Add new JS-visible methods as `impl MqttServerWrapper { fn js_*(...) }` and export them in `#[neon::main]`.
+  - Use the existing `SendResultExt` to surface channel errors to JS promises.
+  - For JS callbacks, store `Root<JsFunction>` in `HOOK_CALLBACKS` and dispatch via `Channel::try_send`.
+  - Maintain 5s safety timeouts on JS-dependent decisions; prefer deny-on-timeout for auth/ACL.
+- Tests
+  - Use unique ports per test and `waitForPort()` readiness probe.
+  - Always `await server.stop()` and `server.close()` in `afterEach` to avoid hanging processes.
+  - Favor real MQTT flows where practical; keep test runtime tight.
+- General
+  - Don’t invent commands or paths; follow the scripts above.
+  - Keep public API stable; if changing behavior, update README and examples.
 
-### Configuration Validation
-- **Compile-time**: TypeScript interfaces prevent invalid configuration at compile time
-- **Runtime validation**: Additional checks for TLS requirements and port ranges
-- **Type guards**: Configuration validation with descriptive error messages
+## Implementation playbooks
 
-### Error Handling Pattern
-- **Typed errors**: Configuration errors thrown as Error objects with specific messages
-- **Promise rejections**: Runtime errors properly typed and converted to Promise rejections
-- **Channel errors**: Rust communication errors handled via `SendResultExt` trait
-- **Minimal logging**: Only critical WARN/ERROR logs for user-significant failures (invalid QoS, publish failure, auth timeout/channel error)
+When you add functionality, follow these patterns to keep the code coherent.
 
-### Testing Conventions
-- **TypeScript tests**: Written in TypeScript with full type checking (`test/*.test.ts`)
-- **Port probing**: Tests verify actual port listening using typed `net.Socket` connections
-- **Type assertions**: Use TypeScript's type system for better test reliability
-- **Async cleanup**: Always call `server.close()` after tests to prevent process hanging
+### 1) Add a new native method accessible from TypeScript
 
-## File Structure Patterns
-- `src/lib.rs`: Core Rust implementation wrapping RMQTT with Neon exports
-- `index.ts`: Main TypeScript API with full type definitions and class implementation
-- `test/server.test.ts`: TypeScript test suite with type-safe test patterns
-- `types/`: TypeScript type declarations for native modules and interfaces
-- `dist/`: Compiled JavaScript output (gitignored, generated by TypeScript compiler)
-- `tsconfig.json`: TypeScript compilation configuration
-- `Cargo.toml`: Rust dependencies with RMQTT features
-- `package.json`: NPM metadata with TypeScript build scripts
+- Rust
+  - Implement `fn js_<name>(cx: FunctionContext) -> JsResult<...>` on `MqttServerWrapper`.
+  - Use channels/async as needed; resolve/reject the `Deferred` via `Channel` for async.
+  - Export in `#[neon::main]` with a matching name (e.g., `mqttServer<PascalName>`).
+- TypeScript
+  - Add the symbol to `src/ts/native/bridge.ts` `NativeModule` and to the exported destructuring.
+  - Wrap it in `src/ts/api/MqttServer.ts` as an idiomatic method with proper types and runtime checks.
+  - Update `src/index.ts` exports as needed.
+- Tests & docs
+  - Add a focused test in `test/*.test.ts` (use a fresh port, ensure cleanup).
+  - Document in README if it affects public API.
 
-## Common Modifications
-- **Adding new methods**: Add to Rust with `js_*` prefix → export in `main()` → add typed method to TypeScript class
-- **Configuration options**: Extend TypeScript interfaces first, then update validation logic
-- **Protocol support**: Update TypeScript protocol union types and Rust protocol matching
-- **Type definitions**: Update interface definitions in TypeScript for compile-time safety
-- **Examples**: When demonstrating auth, prefer a simple JS auth hook (e.g., password === 'demo') and set allowAnonymous: false
+### 2) Add a new hook or extend hook payloads
 
-## TypeScript Specific Patterns
-- **Interface exports**: Use `export interface` for configuration types that consumers might need
-- **Static factory methods**: Type-safe configuration builders (`createBasicConfig`, `createMultiProtocolConfig`)
-- **Generic typing**: Proper typing for Promise return values and async operations
-- **Module declarations**: Type declarations for native modules in `types/` directory
+- Rust
+  - Extend `HOOK_CALLBACKS` storage and `JavaScriptHookHandler` dispatch logic.
+  - For decision hooks, use oneshot + 5s timeout; define a clear default on failure/timeout.
+  - Map fields explicitly to JS objects; keep names/types aligned with TS interfaces.
+- TypeScript
+  - Update `src/ts/api/hooks.ts` with new callback type/signatures and result types.
+  - Update `MqttServer.setHooks` call site mapping in `lib.rs::js_set_hooks` if you add a field.
+- Tests
+  - Add integration tests that trigger the hook via a real client when feasible.
 
-## RMQTT Integration Points
-- **ServerContext**: Manages plugins and global configuration with TypeScript wrapper
-- **Builder pattern**: Fluent API configuration with TypeScript interface validation
-- **Multi-protocol**: Each listener independently configured with compile-time protocol checking
-- **Plugin system**: Optional plugin loading with TypeScript configuration interfaces
+### 3) Extend configuration
+
+- TypeScript
+  - Update `ServerConfig`/`ListenerConfig` (and related option builders) in `src/ts/api/config.ts` and `src/ts/api/types.ts` if relevant.
+  - Update `validateServerConfig` to enforce new invariants (e.g., TLS requirements).
+- Rust
+  - Parse the new fields in `lib.rs::parse_config` and thread them into `ServerConfig` in `src/rs/server.rs`.
+  - Apply them in RMQTT builder(s) within `start_server`.
+- Tests
+  - Add tests to cover invalid configs and valid multi-protocol configurations.
+
+## Testing checklist (what “done” looks like)
+
+- Unit/integration tests pass locally via `npm test`.
+- Server lifecycle tests:
+  - Start/stop/close without leaks; port actually listens (use `waitForPort`).
+  - Publish with server running succeeds; with server stopped rejects clearly.
+- Hook tests:
+  - Auth allow/deny/timeout semantics are correct.
+  - Subscribe ACL allow/deny with optional QoS override, including timeouts.
+- Example(s) still run: `npm run example` completes setup and publishes at least once.
+
+## Common pitfalls (avoid these)
+
+- Not building native before running TS that expects `dist/index.node`. Fix by running `npm run build` or `npm run build:native`.
+- Changing `bridge.ts` loader paths without updating both candidates. Keep both paths in sync.
+- Missing `server.close()` after tests — can leave the process hanging.
+- Publishing before the server context is ready — the Rust side guards with `wait_for_ready(5000)`, but prefer to wait for port readiness in tests/flows.
+- Invalid QoS values cause a logged ERROR and message drop in Rust; validate QoS at the API call site when possible.
+
+## Security and production notes
+
+- Prefer TLS/WSS in production; both `tlsCert` and `tlsKey` are required for secure listeners.
+- Implement your `onClientAuthenticate` in JS; if not set, RMQTT defaults apply.
+- Use Subscribe ACL (`onClientSubscribeAuthorize`) to scope subscriptions (e.g., `<username>/*`) and cap QoS as needed.
+- Keep logs minimal; avoid sensitive information in log messages.
+
+## Acceptance criteria & quality gates for Copilot-generated changes
+
+Before finishing a PR, Copilot should ensure:
+- Build: `npm run build` succeeds (native + TS).
+- Tests: `npm test` passes (Mocha, real ports, no hangs). Each new public behavior has tests.
+- Types: TS compiles strictly (no new errors). Public types updated where behavior changed.
+- Docs: README and examples updated for public API changes. Keep changelog-style notes in PR description.
+- Diffs: Minimal and localized; no machinery reformat unless necessary for the change.
+
+## When to search vs. when to trust these instructions
+
+- Default: follow this document. Search the repo for exact symbols/paths if something doesn’t match.
+- Web search only when implementing new 3rd‑party patterns or when RMQTT/Neon usage requires current upstream examples.
+
+---
+
+If you need path‑specific guidance (for certain file types), add `.github/instructions/*.instructions.md` files with an `applyTo` glob in the front matter. For now, this single file is authoritative for the whole repository.

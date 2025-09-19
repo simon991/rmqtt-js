@@ -1,36 +1,45 @@
 # Examples
 
-This directory contains example implementations demonstrating how to use the MQTT server library.
+This directory contains runnable examples demonstrating how to use the mqtt-server library with real hooks, authentication, and publish/subscribe flows.
 
 ## simple-server.ts
 
-A complete example showing:
-- Basic MQTT server setup
-- Configuration options
-- Graceful shutdown handling
-- Client connection examples for various languages
+A comprehensive example that showcases:
 
-### Running the Example
+- Basic TCP server on port 1883
+- JavaScript authentication via `onClientAuthenticate` (demo password = "demo")
+- Subscribe ACLs via `onClientSubscribeAuthorize` (allow `<username>/*` and `server/public/*`, QoS ≤ 1)
+- Real‑time logs for publish/subscribe/unsubscribe hooks
+- Server‑side publishing (status, heartbeat, sensor samples)
+- Graceful shutdown on SIGINT/SIGTERM
+
+### Run it
 
 ```bash
-# Using npm script (recommended)
+# Recommended
 npm run example
 
-# Direct execution (Node.js 20.6.0+)
+# Direct (Node.js 20.6.0+)
 node examples/simple-server.ts --experimental-strip-types
 
-# Compiled version
+# Compiled
 npm run build && node dist/examples/simple-server.js
 ```
 
-### What it demonstrates
+### Try it with mosquitto
 
-- Creating an MQTT server instance
-- Starting a TCP server on port 1883
-- Proper graceful shutdown with signal handling
-- Client connection instructions for:
-  - mosquitto command line tools
-  - MQTT.js (JavaScript/Node.js)
-  - paho-mqtt (Python)
+```bash
+# Subscribe (allowed)
+mosquitto_sub -h localhost -p 1883 -u alice -P "demo" -t "alice/#"
+mosquitto_sub -h localhost -p 1883 -u alice -P "demo" -t "server/public/#"
 
-The example server will run until you press Ctrl+C, showing helpful connection information and handling shutdown gracefully.
+# Subscribe (denied)
+mosquitto_sub -h localhost -p 1883 -u alice -P "demo" -t "server/secret/#"
+
+# Publish
+mosquitto_pub -h localhost -p 1883 -u alice -P "demo" -t "alice/test" -m "Hello!"
+```
+
+The example runs until you press Ctrl+C and prints helpful logs describing auth decisions, ACL outcomes, and message activity.
+
+See also: [CHEATSHEET.md](./CHEATSHEET.md) for mqtt.js and Python (paho-mqtt) quick recipes.

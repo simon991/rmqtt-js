@@ -38,6 +38,8 @@
     "node_modules",
     "dist",
     "target",
-    "**/*.js"
+    "**/*.js",
+    "examples",
+    "docs"
   ]
 }
