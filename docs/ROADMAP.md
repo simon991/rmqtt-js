@@ -79,6 +79,35 @@ This roadmap prioritizes features and improvements of this MQTT server (Neon + R
   - Rust: Generate a stable id and track connected count.
 - Acceptance: Getters return consistent values; tests validate.
 
+1) Rate limiting and safety limits
+- What: Broker-side policies to protect resources and improve reliability (inspired by EMQX/Mosquitto/VerneMQ best practices).
+- Scope:
+  - TS Config: `{ rateLimits?: { connRatePerSec?, maxConnections?, publishMsgsPerSec?, publishBytesPerSec?, maxInflight?, maxQueued?, maxPacketSizeBytes? } }`.
+  - Rust: Enforce at connection/publish paths; apply per-client counters; drop/deny with clear reason.
+  - Tests: flood-publish and oversize packet tests; ensure graceful denials with v5 reason codes when possible.
+- Acceptance: Limits enforced with predictable behavior; no broker crash; clear client feedback on violations.
+
+1) MQTT v5 subscription options
+- What: Support MQTT 5 subscription features: `noLocal`, `retainAsPublished`, `retainHandling`, and `subscriptionIdentifier`.
+- Scope:
+  - TS: Extend subscribe-related types and tests; surface subscription identifiers in publish hook payloads.
+  - Rust: Marshal options to RMQTT; include identifiers in forwarded PUBLISH where applicable.
+- Acceptance: Options honored end-to-end; identifiers visible to clients that request them.
+
+1) Observability: Prometheus metrics (phase 1)
+- What: Expose a basic Prometheus endpoint with broker counters (connections, publishes, acks, drops, retained, inflight, queues) and hook timings.
+- Scope:
+  - TS Config: `{ metrics?: { prometheus?: { enabled: boolean; port?: number; host?: string } } }`.
+  - Rust: Small HTTP endpoint (Tokio hyper/axum) exporting metrics; or integrate with RMQTT if provided.
+- Acceptance: Scrapeable metrics locally; minimal overhead; docs include sample Grafana panel list.
+
+1) Shared subscriptions enablement & docs
+- What: RMQTT supports `$share/{group}/{filter}`. Ensure compatibility, add tests and documentation.
+- Scope:
+  - Tests: Multiple consumers in a shared group receive load-balanced messages.
+  - Docs: Example with two subscribers sharing a group.
+- Acceptance: Works as expected with QoS1/2; documented.
+
 ---
 
 ## P2 — Later
@@ -110,6 +139,27 @@ This roadmap prioritizes features and improvements of this MQTT server (Neon + R
   - TS: Define plugin interface; lifecycle; registration API.
 - Acceptance: Example plugin + docs; safe execution boundaries.
 
+1)  Full $SYS topics and admin API
+- What: Publish broker metrics/events to `$SYS/#` topics and provide a minimal admin/read-only API.
+- Scope:
+  - TS Config: `{ sysTopics?: { enabled: boolean; namespace?: string } }`.
+  - Rust: Emit on client connect/disconnect, subscribe/unsubscribe counters, heartbeat, retained counts.
+  - Admin: Optional HTTP endpoints to fetch stats (read-only) mirroring Prometheus counters.
+- Acceptance: `$SYS` visible when enabled; admin endpoints return JSON; docs list topics.
+
+1)  PROXY protocol v1/v2 and forwarded IPs
+- What: Preserve original client IP/port from load balancers; support `X-Forwarded-For` on websockets.
+- Scope:
+  - TS Config: `{ proxy?: { protocol?: 'none' | 'v1' | 'v2'; trustForwarded?: boolean } }`.
+  - Rust: Parse Proxy Protocol headers and store in session info; expose to hooks.
+- Acceptance: Remote address reflects original source behind LB when enabled.
+
+1)  Advanced delivery controls
+- What: Add delayed publish (`$delayed/...`), topic rewrite, auto-subscription, P2P messaging patterns supported by RMQTT.
+- Scope:
+  - TS Config toggles; examples and tests where feasible.
+- Acceptance: Documented and validated where supported; disabled by default.
+
 ---
 
 ## Implementation notes (by file)
@@ -120,8 +170,8 @@ This roadmap prioritizes features and improvements of this MQTT server (Neon + R
 - TypeScript
   - `src/ts/api/hooks.ts`: Add hook types for publish ACL, lifecycle, pre-connect, forward filtering; document return shapes.
   - `src/ts/api/MqttServer.ts`: New methods/getters (`getStats`, `id`, `connectedClients`, server-side subscribe/unsubscribe when implemented); wire hooks.
-  - `src/ts/api/config.ts`: Extend server config (policies, heartbeat, persistence, cluster options).
-  - `src/ts/utils/validators.ts`: Validate new config fields (timeouts, TLS, persistence/cluster invariants).
+  - `src/ts/api/config.ts`: Extend server config (policies, heartbeat, persistence, cluster options, rate limits, metrics, auth backends, proxy, bridges).
+  - `src/ts/utils/validators.ts`: Validate new config fields (timeouts, TLS, persistence/cluster invariants, rate limits, metrics, auth, proxy).
 - Tests
   - Add targeted integration tests using `mqtt` client; ensure unique ports; leverage `waitForPort`.
 

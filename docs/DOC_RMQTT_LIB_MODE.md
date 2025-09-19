@@ -1,5 +1,7 @@
 # RMQTT-Server
 
+RMQTT full documentation can be found here: https://deepwiki.com/rmqtt/rmqtt
+
 [![crates.io page](https://img.shields.io/crates/v/rmqtt.svg)](https://crates.io/crates/rmqtt)
 [![docs.rs page](https://docs.rs/rmqtt/badge.svg)](https://docs.rs/rmqtt/latest/rmqtt/)
 

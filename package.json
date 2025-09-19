@@ -36,15 +36,13 @@
     "pubsub",
     "broker",
     "server",
-    "rust",
-    "neon",
     "rmqtt",
     "iot",
     "websocket",
     "tls",
     "typescript"
   ],
-  "author": "splitbuddies",
+  "author": "Simon Buchholz",
   "bugs": {
     "url": "https://github.com/splitbuddies/mqtt-pubsub-adapter/issues"
   },
