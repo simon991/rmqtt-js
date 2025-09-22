@@ -19,15 +19,15 @@ describe('MQTT Server Hook Callbacks', () => {
         if (server.running) {
             await server.stop();
             if (currentPort) {
-                try { await waitForPortClosed('127.0.0.1', currentPort); } catch {}
+                try { await waitForPortClosed('127.0.0.1', currentPort); } catch { }
             }
         }
         server.close();
     });
 
-    it('should register hook callbacks successfully', async function() {
+    it('should register hook callbacks successfully', async function () {
         this.timeout(10000); // Set a 10 second timeout for this test
-        
+
         return new Promise<void>((resolve, reject) => {
             const timeout = setTimeout(() => {
                 reject(new Error('Hook test timeout'));
@@ -66,61 +66,61 @@ describe('MQTT Server Hook Callbacks', () => {
             }).then(async () => {
                 // Wait for server to be ready
                 await waitForPort('127.0.0.1', currentPort);
-                    // Connect a real MQTT client to trigger hook events
-                    const client = connect(`mqtt://127.0.0.1:${currentPort}`);
+                // Connect a real MQTT client to trigger hook events
+                const client = connect(`mqtt://127.0.0.1:${currentPort}`);
 
-                    client.on('connect', () => {
-                        
-                        // Subscribe to a topic (should trigger onClientSubscribe hook)
-                        client.subscribe('test/hook/topic', (err) => {
-                            if (err) {
+                client.on('connect', () => {
+
+                    // Subscribe to a topic (should trigger onClientSubscribe hook)
+                    client.subscribe('test/hook/topic', (err) => {
+                        if (err) {
+                            clearTimeout(timeout);
+                            client.end(false, {}, () => { });
+                            reject(err);
+                            return;
+                        }
+
+                        // Publish a message from the server (should trigger onMessagePublish hook)
+                        server.publish('test/hook/topic', Buffer.from('Hook test message'))
+                            .then(() => {
+                                // Publish a message from the client (should also trigger onMessagePublish hook)
+                                client.publish('test/hook/topic', 'Client message');
+
+                                // Give hooks time to be called, then unsubscribe
+                                setTimeout(() => {
+                                    client.unsubscribe('test/hook/topic', () => {
+                                        // Give final hooks time to be called, then end test
+                                        setTimeout(() => {
+                                            clearTimeout(timeout);
+                                            client.end(false, {}, () => {
+                                                // Verify that hooks were set without errors
+                                                try {
+                                                    expect(messagePublishEvents.length).to.be.greaterThanOrEqual(0);
+                                                    expect(subscribeEvents.length).to.be.greaterThanOrEqual(0);
+                                                    expect(unsubscribeEvents.length).to.be.greaterThanOrEqual(0);
+                                                    resolve();
+                                                } catch (error) {
+                                                    reject(error);
+                                                }
+                                            });
+                                        }, 60);
+                                    });
+                                }, 120);
+                            })
+                            .catch((error) => {
                                 clearTimeout(timeout);
-                                client.end(false, {}, () => {});
-                                reject(err);
-                                return;
-                            }
-
-                            // Publish a message from the server (should trigger onMessagePublish hook)
-                            server.publish('test/hook/topic', Buffer.from('Hook test message'))
-                                .then(() => {
-                                    // Publish a message from the client (should also trigger onMessagePublish hook)
-                                    client.publish('test/hook/topic', 'Client message');
-
-                                    // Give hooks time to be called, then unsubscribe
-                                    setTimeout(() => {
-                                        client.unsubscribe('test/hook/topic', () => {
-                                            // Give final hooks time to be called, then end test
-                                            setTimeout(() => {
-                                                clearTimeout(timeout);
-                                                client.end(false, {}, () => {
-                                                    // Verify that hooks were set without errors
-                                                    try {
-                                                        expect(messagePublishEvents.length).to.be.greaterThanOrEqual(0);
-                                                        expect(subscribeEvents.length).to.be.greaterThanOrEqual(0);
-                                                        expect(unsubscribeEvents.length).to.be.greaterThanOrEqual(0);
-                                                        resolve();
-                                                    } catch (error) {
-                                                        reject(error);
-                                                    }
-                                                });
-                                            }, 60);
-                                        });
-                                    }, 120);
-                                })
-                                .catch((error) => {
-                                    clearTimeout(timeout);
-                                    client.end(false, {}, () => {});
-                                    reject(error);
-                                });
-                        });
+                                client.end(false, {}, () => { });
+                                reject(error);
+                            });
                     });
+                });
 
-                    client.on('error', (error) => {
-                        clearTimeout(timeout);
-                        client.end(false, {}, () => {});
-                        reject(error);
-                    });
-                
+                client.on('error', (error) => {
+                    clearTimeout(timeout);
+                    client.end(false, {}, () => { });
+                    reject(error);
+                });
+
             }).catch((error) => {
                 clearTimeout(timeout);
                 reject(error);
@@ -128,9 +128,9 @@ describe('MQTT Server Hook Callbacks', () => {
         });
     });
 
-    it('should handle partial hook registration', async function() {
+    it('should handle partial hook registration', async function () {
         this.timeout(5000); // Set a 5 second timeout for this test
-        
+
         // Only register some hooks
         const hooks: HookCallbacks = {
             onMessagePublish: (session: SessionInfo | null, from: MessageFrom, message: MessageInfo) => {

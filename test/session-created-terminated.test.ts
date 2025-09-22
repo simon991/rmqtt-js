@@ -14,8 +14,8 @@ describe('Session created/terminated hooks', function () {
   });
 
   afterEach(async () => {
-    try { await server.stop(); } catch {}
-    try { server.close(); } catch {}
+    try { await server.stop(); } catch { }
+    try { server.close(); } catch { }
   });
 
   it('fires onSessionCreated and onSessionTerminated', async () => {

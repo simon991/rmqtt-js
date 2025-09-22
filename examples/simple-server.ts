@@ -173,14 +173,14 @@ async function main() {
         console.log(`   - Anonymous connections: disabled`);
         console.log(`   - Real-time event hooks: active`);
 
-    console.log('\n🔒 Subscribe ACL demo:');
-    console.log('   - Allowed: username "alice" -> topics "alice/#" and "server/public/#"');
-    console.log('   - Denied: any other topic filters');
-    console.log('   - Granted QoS is capped to 1 even if client requests 2');
-    console.log('\nTry:');
-    console.log('   mosquitto_sub -h localhost -p 1883 -u alice -P "demo" -t "alice/#"');
-    console.log('   mosquitto_sub -h localhost -p 1883 -u alice -P "demo" -t "server/public/#"');
-    console.log('   mosquitto_sub -h localhost -p 1883 -u alice -P "demo" -t "server/secret/#"   # should be denied');
+        console.log('\n🔒 Subscribe ACL demo:');
+        console.log('   - Allowed: username "alice" -> topics "alice/#" and "server/public/#"');
+        console.log('   - Denied: any other topic filters');
+        console.log('   - Granted QoS is capped to 1 even if client requests 2');
+        console.log('\nTry:');
+        console.log('   mosquitto_sub -h localhost -p 1883 -u alice -P "demo" -t "alice/#"');
+        console.log('   mosquitto_sub -h localhost -p 1883 -u alice -P "demo" -t "server/public/#"');
+        console.log('   mosquitto_sub -h localhost -p 1883 -u alice -P "demo" -t "server/secret/#"   # should be denied');
 
         // Log server status
         console.log(`\n📊 Server status: ${server.running ? 'Running' : 'Stopped'}`);
@@ -260,7 +260,7 @@ async function pubSubExample() {
                     const processedData = {
                         ...data,
                         processed_at: new Date().toISOString(),
-                        processed_by: 'mqtt-server'
+                        processed_by: 'rmqtt-server'
                     };
 
                     // Republish to processed topic

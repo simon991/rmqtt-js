@@ -1,26 +1,38 @@
 {
-  "name": "mqtt-server",
+  "name": "rmqtt-server",
   "version": "0.1.0",
   "description": "High-performance MQTT server for Node.js built with Rust and Neon",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "require": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "sideEffects": false,
   "scripts": {
-    "build": "npm run clean && npm run build:native && npm run build:ts",
-    "build:native": "cargo-cp-artifact -nc dist/index.node -- cargo build --message-format=json-render-diagnostics",
+    "build": "npm run clean && npm run build:native:release && npm run build:ts",
+    "build:native:release": "cargo build --release --message-format=json-render-diagnostics && node scripts/copy-native.js",
+    "build:native:install": "cargo build --release --message-format=json-render-diagnostics && node scripts/copy-native.js",
     "build:ts": "tsc",
-    "install": "npm run build",
-  "test": "npm run build:native && mocha --require ts-node/register \"test/**/*.test.ts\"",
+    "install": "node scripts/install.js",
+    "test": "npm run build:native:release && mocha --require ts-node/register \"test/**/*.test.ts\"",
     "clean": "rm -rf dist",
-    "prepublishOnly": "npm run clean && npm run build",
+    "prepublishOnly": "npm run clean && npm run build:ts",
+    "pack:check": "npm pack --dry-run",
     "example": "npm run build && node examples/simple-server.ts --experimental-strip-types"
   },
   "license": "MIT",
+  "dependencies": {
+    "node-gyp-build": "^4.8.2"
+  },
   "devDependencies": {
     "@types/chai": "^5.2.2",
     "@types/mocha": "^10.0.10",
     "@types/mqtt": "^0.0.34",
     "@types/node": "^20.19.16",
-    "cargo-cp-artifact": "^0.1",
     "chai": "^6.0.1",
     "mocha": "^10.0.0",
     "mqtt": "^5.14.1",
@@ -52,8 +64,11 @@
   },
   "files": [
     "dist/",
+    "prebuilds/",
     "src/",
     "Cargo.toml",
-    "README.md"
+    "Cargo.lock",
+    "README.md",
+    "LICENSE"
   ]
 }

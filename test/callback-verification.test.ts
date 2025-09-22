@@ -22,9 +22,9 @@ describe('MQTT JavaScript Hook Callbacks', () => {
         server.close();
     });
 
-    it('should actually call JavaScript hook functions when MQTT events occur', async function() {
+    it('should actually call JavaScript hook functions when MQTT events occur', async function () {
         this.timeout(15000);
-        
+
         return new Promise<void>((resolve, reject) => {
             const timeout = setTimeout(() => {
                 reject(new Error('Hook callback test timeout'));
@@ -44,7 +44,7 @@ describe('MQTT JavaScript Hook Callbacks', () => {
                 },
                 onClientUnsubscribe: (session, unsubscription) => {
                     clientUnsubscribeCalled = true;
-                    
+
                     // Test completion condition: all three callback types have been called
                     setTimeout(() => {
                         clearTimeout(timeout);
@@ -56,7 +56,7 @@ describe('MQTT JavaScript Hook Callbacks', () => {
                         } catch (error) {
                             reject(error);
                         }
-                        }, 40);
+                    }, 40);
                 }
             };
 
@@ -76,45 +76,45 @@ describe('MQTT JavaScript Hook Callbacks', () => {
                 }]
             }).then(async () => {
                 await waitForPort('127.0.0.1', currentPort);
-                    const client = connect(`mqtt://127.0.0.1:${currentPort}`);
+                const client = connect(`mqtt://127.0.0.1:${currentPort}`);
 
-                    client.on('connect', () => {
-                        
-                        // Subscribe to trigger onClientSubscribe
-                        client.subscribe('test/callback/topic', (err) => {
-                            if (err) {
-                                clearTimeout(timeout);
-                                client.end(false, {}, () => {});
-                                reject(err);
-                                return;
-                            }
+                client.on('connect', () => {
 
-                            // Publish to trigger onMessagePublish
-                            setTimeout(() => {
-                                server.publish('test/callback/topic', Buffer.from('Callback test message'))
-                                    .then(() => {
-                                        // Unsubscribe to trigger onClientUnsubscribe
-                                        setTimeout(() => {
-                                            client.unsubscribe('test/callback/topic', () => {
-                                                client.end(false, {}, () => {});
-                                            });
-                                        }, 200);
-                                    })
-                                    .catch((error: any) => {
-                                        clearTimeout(timeout);
-                                        client.end(false, {}, () => {});
-                                        reject(error);
-                                    });
-                            }, 150);
-                        });
+                    // Subscribe to trigger onClientSubscribe
+                    client.subscribe('test/callback/topic', (err) => {
+                        if (err) {
+                            clearTimeout(timeout);
+                            client.end(false, {}, () => { });
+                            reject(err);
+                            return;
+                        }
+
+                        // Publish to trigger onMessagePublish
+                        setTimeout(() => {
+                            server.publish('test/callback/topic', Buffer.from('Callback test message'))
+                                .then(() => {
+                                    // Unsubscribe to trigger onClientUnsubscribe
+                                    setTimeout(() => {
+                                        client.unsubscribe('test/callback/topic', () => {
+                                            client.end(false, {}, () => { });
+                                        });
+                                    }, 200);
+                                })
+                                .catch((error: any) => {
+                                    clearTimeout(timeout);
+                                    client.end(false, {}, () => { });
+                                    reject(error);
+                                });
+                        }, 150);
                     });
+                });
 
-                    client.on('error', (error) => {
-                        clearTimeout(timeout);
-                        client.end(false, {}, () => {});
-                        reject(error);
-                    });
-                
+                client.on('error', (error) => {
+                    clearTimeout(timeout);
+                    client.end(false, {}, () => { });
+                    reject(error);
+                });
+
             }).catch((error) => {
                 clearTimeout(timeout);
                 reject(error);

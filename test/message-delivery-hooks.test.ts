@@ -12,8 +12,8 @@ describe('Message delivery hooks', () => {
   });
 
   afterEach(async () => {
-    try { await server.stop(); } catch {}
-    try { await server.close(); } catch {}
+    try { await server.stop(); } catch { }
+    try { await server.close(); } catch { }
   });
 
   it('fires onMessageDelivered and onMessageAcked for QoS1', async () => {
@@ -27,8 +27,8 @@ describe('Message delivery hooks', () => {
       },
     });
 
-    await server.start({ listeners: [{ name: 'tcp', address: '127.0.0.1', port, protocol: 'tcp', allowAnonymous: true }]});
-  await waitForPort('127.0.0.1', port);
+    await server.start({ listeners: [{ name: 'tcp', address: '127.0.0.1', port, protocol: 'tcp', allowAnonymous: true }] });
+    await waitForPort('127.0.0.1', port);
 
     const client = mqtt.connect(`mqtt://127.0.0.1:${port}`, { protocolVersion: 4, clean: true });
     await new Promise<void>((resolve, reject) => {
@@ -42,7 +42,7 @@ describe('Message delivery hooks', () => {
     });
 
     // Publish QoS1
-  await server.publish('deliver/test', Buffer.from('hello'), { qos: 1, retain: false });
+    await server.publish('deliver/test', Buffer.from('hello'), { qos: 1, retain: false });
 
     // Wait briefly for Neon channel to dispatch callbacks
     await new Promise(res => setTimeout(res, 200));

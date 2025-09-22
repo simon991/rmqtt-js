@@ -1,6 +1,6 @@
 <div align="center">
 
-# mqtt-server
+ # rmqtt-server
 
 Blazing‑fast, experimental MQTT broker for Node.js — powered by Rust RMQTT and Neon.
 
@@ -35,21 +35,27 @@ Blazing‑fast, experimental MQTT broker for Node.js — powered by Rust RMQTT a
 
 ## Install
 
-```bash
-npm install mqtt-server
-```
+ ```bash
+ npm install rmqtt-server
+ ```
 
-Requirements:
-- Node.js 18+ recommended (14+ supported)
-- A Rust toolchain (the native module is built during install)
-  - macOS: Xcode Command Line Tools (`xcode-select --install`)
-  - Linux: `build-essential`, `pkg-config`
+ This package ships prebuilt binaries for common platforms (linux-x64/arm64, darwin-x64/arm64, win32-x64). If a prebuild for your platform isn’t available, install will build from source:
+ - Node.js 18+ recommended (engines allow >=14)
+ - Rust toolchain is required when building from source
+   - macOS: Xcode Command Line Tools (`xcode-select --install`)
+   - Linux: `build-essential`, `pkg-config`
+   - Windows: Visual Studio Build Tools (MSVC), Rustup default toolchain
+
+To preview what would be published in a tarball, run:
+```bash
+npm run pack:check
+```
 
 ## Quick start
 
 TypeScript
 ```ts
-import { MqttServer, QoS } from "mqtt-server";
+import { MqttServer, QoS } from "rmqtt-server";
 
 const server = new MqttServer();
 
@@ -69,7 +75,7 @@ await server.publish("sensor/temperature", "23.7", { qos: QoS.AtLeastOnce });
 
 JavaScript (CommonJS)
 ```js
-const { MqttServer, QoS } = require("mqtt-server");
+const { MqttServer, QoS } = require("rmqtt-server");
 
 (async () => {
   const server = new MqttServer();
@@ -84,25 +90,25 @@ Listen to broker events in real time — only invoked if you register them.
 
 ### Hooks overview
 
-| Hook                                        | Type                | When it fires        | JS return                                    | Default if not set             | Timeout/error |
-| ------------------------------------------- | ------------------- | -------------------- | -------------------------------------------- | ------------------------------ | ------------- |
-| `onClientConnect(info)`                     | notification        | Server receives CONNECT | `void`                                     | —                              | —             |
-| `onClientAuthenticate(auth)`                | decision            | A client connects    | `{ allow, superuser?, reason? }`             | RMQTT defaults                 | deny          |
-| `onClientSubscribeAuthorize(session, sub)`  | decision            | Client subscribes    | `{ allow, qos?, reason? }`                   | RMQTT defaults                 | deny          |
-| `onClientPublishAuthorize(session, packet)` | decision + mutation | Client publishes     | `{ allow, topic?, payload?, qos?, reason? }` | allow (except `$SYS/*` denied) | deny          |
-| `onMessagePublish(session, from, msg)`      | notification        | Any publish observed | `void`                                       | —                              | —             |
-| `onClientSubscribe(session, sub)`           | notification        | Client subscribes    | `void`                                       | —                              | —             |
-| `onClientUnsubscribe(session, unsub)`       | notification        | Client unsubscribes  | `void`                                       | —                              | —             |
-| `onMessageDelivered(session, from, msg)`    | notification        | Before delivering a message to a client | `void`                        | —                              | —             |
-| `onMessageAcked(session, from, msg)`        | notification        | After client acknowledges a delivered message | `void`                   | —                              | —             |
-| `onMessageDropped(session, from?, msg, info?)` | notification     | Message could not be delivered (dropped) | `void`                       | —                              | —             |
-| `onSessionCreated(session)`                 | notification        | Session created      | `void`                                       | —                              | —             |
-| `onClientConnected(session)`                | notification        | Client connected     | `void`                                       | —                              | —             |
-| `onClientConnack(info)`                     | notification        | CONNACK (success/fail) | `void`                                     | —                              | —             |
-| `onClientDisconnected(session, info?)`      | notification        | Client disconnected  | `void`                                       | —                              | —             |
-| `onSessionSubscribed(session, sub)`         | notification        | Client subscribed    | `void`                                       | —                              | —             |
-| `onSessionUnsubscribed(session, unsub)`     | notification        | Client unsubscribed  | `void`                                       | —                              | —             |
-| `onSessionTerminated(session, info?)`       | notification        | Session terminated   | `void`                                       | —                              | —             |
+| Hook                                           | Type                | When it fires                                 | JS return                                    | Default if not set             | Timeout/error |
+| ---------------------------------------------- | ------------------- | --------------------------------------------- | -------------------------------------------- | ------------------------------ | ------------- |
+| `onClientConnect(info)`                        | notification        | Server receives CONNECT                       | `void`                                       | —                              | —             |
+| `onClientAuthenticate(auth)`                   | decision            | A client connects                             | `{ allow, superuser?, reason? }`             | RMQTT defaults                 | deny          |
+| `onClientSubscribeAuthorize(session, sub)`     | decision            | Client subscribes                             | `{ allow, qos?, reason? }`                   | RMQTT defaults                 | deny          |
+| `onClientPublishAuthorize(session, packet)`    | decision + mutation | Client publishes                              | `{ allow, topic?, payload?, qos?, reason? }` | allow (except `$SYS/*` denied) | deny          |
+| `onMessagePublish(session, from, msg)`         | notification        | Any publish observed                          | `void`                                       | —                              | —             |
+| `onClientSubscribe(session, sub)`              | notification        | Client subscribes                             | `void`                                       | —                              | —             |
+| `onClientUnsubscribe(session, unsub)`          | notification        | Client unsubscribes                           | `void`                                       | —                              | —             |
+| `onMessageDelivered(session, from, msg)`       | notification        | Before delivering a message to a client       | `void`                                       | —                              | —             |
+| `onMessageAcked(session, from, msg)`           | notification        | After client acknowledges a delivered message | `void`                                       | —                              | —             |
+| `onMessageDropped(session, from?, msg, info?)` | notification        | Message could not be delivered (dropped)      | `void`                                       | —                              | —             |
+| `onSessionCreated(session)`                    | notification        | Session created                               | `void`                                       | —                              | —             |
+| `onClientConnected(session)`                   | notification        | Client connected                              | `void`                                       | —                              | —             |
+| `onClientConnack(info)`                        | notification        | CONNACK (success/fail)                        | `void`                                       | —                              | —             |
+| `onClientDisconnected(session, info?)`         | notification        | Client disconnected                           | `void`                                       | —                              | —             |
+| `onSessionSubscribed(session, sub)`            | notification        | Client subscribed                             | `void`                                       | —                              | —             |
+| `onSessionUnsubscribed(session, unsub)`        | notification        | Client unsubscribed                           | `void`                                       | —                              | —             |
+| `onSessionTerminated(session, info?)`          | notification        | Session terminated                            | `void`                                       | —                              | —             |
 
 Auth (JS → Rust decision flow)
 ```ts
@@ -112,7 +118,6 @@ server.setHooks({
     return { allow, superuser: false, reason: allow ? "ok" : "bad creds" };
   },
 });
-```
 
 Subscribe ACLs with QoS override
 ```ts
@@ -123,10 +128,8 @@ server.setHooks({
     return allowed ? { allow: true, qos: 1 } : { allow: false, reason: "not authorized" };
   },
 });
-```
 
 Promise-based Subscribe ACL
-```ts
 server.setHooks({
   onClientSubscribeAuthorize: async (session, sub) => {
     // e.g., async lookup against a policy service
@@ -385,6 +388,10 @@ What the suite covers:
 - ERROR: Invalid configuration → Ensure at least one listener; TLS/WSS require both `tlsCert` and `tlsKey`
 - WARN: Hook timeout/channel error → Your JS hook may be slow or threw; decisions fall back to deny
 - Native build fails during install → Ensure Rust toolchain and platform build tools are available
+
+## Changelog
+
+See `CHANGELOG.md` for release notes.
 
 ## License
 

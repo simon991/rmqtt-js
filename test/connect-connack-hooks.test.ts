@@ -12,8 +12,8 @@ describe('Client connect/connack hooks (smoke)', () => {
   });
 
   afterEach(async () => {
-    try { await server.stop(); } catch {}
-    try { server.close(); } catch {}
+    try { await server.stop(); } catch { }
+    try { server.close(); } catch { }
   });
 
   it('fires onClientConnect and onClientConnack once on connect', async () => {

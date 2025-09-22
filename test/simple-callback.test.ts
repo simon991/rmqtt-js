@@ -18,18 +18,18 @@ describe('Simple Callback Test', () => {
         if (server.running) {
             await server.stop();
             if (currentPort) {
-                try { await waitForPortClosed('127.0.0.1', currentPort); } catch {}
+                try { await waitForPortClosed('127.0.0.1', currentPort); } catch { }
             }
         }
         server.close();
     });
 
-    it('should call a simple callback function', async function() {
+    it('should call a simple callback function', async function () {
         this.timeout(5000);
-        
+
         return new Promise<void>((resolve, reject) => {
             let callbackCalled = false;
-            
+
             // Set up a simple hook that just sets a flag
             const hooks = {
                 onMessagePublish: () => {
@@ -46,7 +46,7 @@ describe('Simple Callback Test', () => {
             };
 
             server.setHooks(hooks);
-            
+
             currentPort = nextPort();
 
             server.start({

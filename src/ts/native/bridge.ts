@@ -20,15 +20,24 @@ interface NativeModule {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let nativeModule: any;
 {
-  const candidates = [
-    path.join(__dirname, "../../../index.node"), // compiled layout (dist)
-    path.join(__dirname, "../../../dist/index.node"), // ts-node layout (source)
-  ];
+  // Prefer prebuilt binaries when available (node-gyp-build resolves prebuilds/* automatically)
   // eslint-disable-next-line @typescript-eslint/no-var-requires
   const tryRequire = (p: string) => { try { return require(p); } catch { return undefined; } };
-  for (const c of candidates) { nativeModule = tryRequire(c); if (nativeModule) break; }
+  const ngb = tryRequire("node-gyp-build");
+  if (ngb) {
+    // Pass the package root (three levels up from dist/src/ts/native OR src/ts/native)
+    const pkgRoot = path.join(__dirname, "../../..");
+    try { nativeModule = ngb(pkgRoot); } catch { /* ignore and fallback */ }
+  }
   if (!nativeModule) {
-    throw new Error(`Failed to load native addon (index.node). Tried: ${candidates.join(", ")}`);
+    const candidates = [
+      path.join(__dirname, "../../../index.node"), // compiled layout (dist)
+      path.join(__dirname, "../../../dist/index.node"), // ts-node layout (source)
+    ];
+    for (const c of candidates) { nativeModule = tryRequire(c); if (nativeModule) break; }
+    if (!nativeModule) {
+      throw new Error(`Failed to load native addon (index.node). Tried prebuilds via node-gyp-build and paths: ${candidates.join(", ")}`);
+    }
   }
 }
 

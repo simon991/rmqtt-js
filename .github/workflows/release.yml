@@ -1,0 +1,128 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+jobs:
+  prebuilds:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-22.04
+            os: linux
+            arch: x64
+          - runner: ubuntu-22.04-arm64
+            os: linux
+            arch: arm64
+          - runner: macos-13
+            os: darwin
+            arch: x64
+          - runner: macos-latest
+            os: darwin
+            arch: arm64
+          - runner: windows-latest
+            os: win32
+            arch: x64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Set up Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            .
+
+      - name: Install system dependencies (Ubuntu)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential pkg-config
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build native (release)
+        run: npm run build:native:release
+
+      - name: Create prebuild folder
+        shell: bash
+        run: |
+          PREBUILD_PLATFORM=${{ matrix.os }} PREBUILD_ARCH=${{ matrix.arch }} node scripts/make-prebuild.js
+
+      - name: Upload prebuilds artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: prebuilds-${{ matrix.os }}-${{ matrix.arch }}
+          path: prebuilds/
+
+  publish:
+    needs: prebuilds
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Download all prebuild artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: ./__prebuilds__
+
+      - name: Merge prebuilds into package dir
+        shell: bash
+        run: |
+          mkdir -p prebuilds
+          shopt -s globstar nullglob
+          for d in __prebuilds__/**/prebuilds/*; do
+            if [ -d "$d" ]; then
+              cp -R "$d" prebuilds/
+            fi
+          done
+          echo "Prebuilds merged:" && ls -R prebuilds || true
+
+      - name: Set up Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            .
+
+      - name: Install system dependencies (Ubuntu)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential pkg-config
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build TS only (native not needed when prebuilds exist)
+        run: npm run build:ts
+
+      - name: Verify pack content
+        run: npm run pack:check
+
+      - name: Publish to npm
+        run: npm publish --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

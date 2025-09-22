@@ -11,6 +11,9 @@ yarn-error.log*
 # TypeScript build output
 dist/
 
+# Precompiled binaries
+prebuilds/
+
 # Environment variables
 .env
 .env.local

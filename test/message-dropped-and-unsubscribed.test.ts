@@ -12,8 +12,8 @@ describe('Message dropped and session unsubscribed hooks', () => {
   });
 
   afterEach(async () => {
-    try { await server.stop(); } catch {}
-    try { server.close(); } catch {}
+    try { await server.stop(); } catch { }
+    try { server.close(); } catch { }
   });
 
   it('fires onSessionUnsubscribed when client unsubscribes', async () => {
@@ -46,9 +46,9 @@ describe('Message dropped and session unsubscribed hooks', () => {
     ]);
     client.end(true);
 
-  // If the promise didn't resolve within 1s, this will fail with a better message
-  // @ts-ignore - subtle assertion using resolved promise state isn't required
-  expect(true).to.equal(true);
+    // If the promise didn't resolve within 1s, this will fail with a better message
+    // @ts-ignore - subtle assertion using resolved promise state isn't required
+    expect(true).to.equal(true);
   });
 
   it('fires onMessageDropped for denied client publish via ACL', async () => {

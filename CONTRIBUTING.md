@@ -1,4 +1,4 @@
-# Contributing to mqtt-server
+# Contributing to rmqtt-server
 
 Thanks for your interest in contributing! This project is a hybrid Rust + TypeScript Neon addon that exposes a high‑performance MQTT broker (RMQTT) to Node.js with a clean TS API. This guide explains how to set up your environment, build and test the project, and submit high‑quality changes.
 
@@ -33,8 +33,8 @@ Useful scripts:
 # Build native addon (dist/index.node) + compile TS to dist/
 npm run build
 
-# Build native addon only (via cargo-cp-artifact)
-npm run build:native
+# Build native addon only (release build and copy to dist/)
+npm run build:native:release
 
 # Build TypeScript only (src/ → dist/)
 npm run build:ts
@@ -171,8 +171,8 @@ Tests:
 
 ## Release notes
 
-- The package builds native code during `npm install` via `cargo-cp-artifact`.
-- `prepublishOnly` runs a fresh build before publishing.
+- Prebuilt binaries are published for major platforms. On install, the module loads a prebuild when available; otherwise it falls back to building from source via `scripts/install.js` (Cargo required).
+- `prepublishOnly` compiles TypeScript only; native artifacts are provided by prebuilds in the release pipeline.
 
 ## Troubleshooting
 

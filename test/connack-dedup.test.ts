@@ -12,8 +12,8 @@ describe('Connack emissions (deny) are not duplicated', () => {
   });
 
   afterEach(async () => {
-    try { await server.stop(); } catch {}
-    try { server.close(); } catch {}
+    try { await server.stop(); } catch { }
+    try { server.close(); } catch { }
   });
 
   it('emits onClientConnack exactly once on auth deny', async () => {
@@ -34,7 +34,7 @@ describe('Connack emissions (deny) are not duplicated', () => {
     });
 
     await new Promise((r) => setTimeout(r, 100));
-    try { client.end(true); } catch {}
+    try { client.end(true); } catch { }
 
     expect(count).to.equal(1);
   });

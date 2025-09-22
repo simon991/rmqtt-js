@@ -18,8 +18,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ ubuntu-latest, macos-latest ]
-        node: [ 20 ]
+        os: [ ubuntu-latest, macos-latest, windows-latest ]
+        node: [ 20, 22 ]
 
     steps:
       - name: Checkout repository
@@ -29,7 +29,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node }}
-          # Cache is most effective with a lockfile; if absent, this is a no-op.
           cache: npm
 
       - name: Set up Rust toolchain
@@ -55,10 +54,10 @@ jobs:
           cargo -vV
 
       - name: Install Node dependencies
-        run: npm install
+        run: npm ci
 
-      - name: TypeScript compile (sanity)
-        run: npm run build:ts
+      - name: Build (release + TS)
+        run: npm run build
 
-      - name: Run tests (builds native add-on first)
+      - name: Run tests
         run: npm test

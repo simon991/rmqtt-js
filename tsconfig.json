@@ -1,11 +1,16 @@
 {
   "compilerOptions": {
     "target": "ES2020",
-  "module": "CommonJS",
-    "lib": ["ES2020"],
-    "types": ["node", "mocha"],
-  "outDir": "./dist",
-  "rootDir": "./src",
+    "module": "CommonJS",
+    "lib": [
+      "ES2020"
+    ],
+    "types": [
+      "node",
+      "mocha"
+    ],
+    "outDir": "./dist",
+    "rootDir": "./src",
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
@@ -13,12 +18,12 @@
     "declaration": true,
     "declarationMap": true,
     "sourceMap": true,
-  "moduleResolution": "node",
+    "moduleResolution": "node",
     "resolveJsonModule": true,
     "allowSyntheticDefaultImports": true,
     "experimentalDecorators": true,
     "emitDecoratorMetadata": true,
-  "noImplicitAny": true,
+    "noImplicitAny": true,
     "noImplicitReturns": true,
     "noImplicitThis": true,
     "noUnusedLocals": false,

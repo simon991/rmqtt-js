@@ -37,7 +37,7 @@ describe('Subscribe Authorization Hook', () => {
     if (server && server.running) {
       await server.stop();
       if (currentPort) {
-        try { await waitForPortClosed('127.0.0.1', currentPort); } catch {}
+        try { await waitForPortClosed('127.0.0.1', currentPort); } catch { }
       }
     }
     server.close();
@@ -58,7 +58,7 @@ describe('Subscribe Authorization Hook', () => {
 
       client.once('connect', () => {
         // Request QoS 2, expect override to QoS 1
-  client!.subscribe('alice/topic', { qos: 2 }, (err, granted) => {
+        client!.subscribe('alice/topic', { qos: 2 }, (err, granted) => {
           if (err) { clearTimeout(timeout); return reject(err); }
           try {
             expect(granted, 'granted results').to.exist;
@@ -248,7 +248,7 @@ describe('Subscribe Authorization Hook', () => {
       client = mqtt.connect(`mqtt://127.0.0.1:${currentPort}`, { username: 'alice', password: 'demo' });
 
       client.once('connect', () => {
-  client!.subscribe('bob/topic', { qos: 0 }, (err, granted) => {
+        client!.subscribe('bob/topic', { qos: 0 }, (err, granted) => {
           try {
             if (err) {
               // mqtt.js with MQTT v5 maps NotAuthorized to an Error (often 'Unspecified error')

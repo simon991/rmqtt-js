@@ -1,5 +1,5 @@
 [package]
-name = "mqtt-server"
+name = "rmqtt-server"
 version = "0.1.0"
 description = "Neon MQTT Server Adapter"
 license = "MIT"

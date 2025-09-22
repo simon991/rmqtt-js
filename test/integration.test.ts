@@ -15,7 +15,7 @@ describe('MQTT Integration Tests', () => {
     beforeEach(async () => {
         server = new MqttServer();
         currentPort = nextPort();
-        
+
         const config: ServerConfig = {
             listeners: [{
                 name: "tcp",
@@ -27,9 +27,9 @@ describe('MQTT Integration Tests', () => {
         };
 
         await server.start(config);
-        
-    // Wait for server to be ready
-    await waitForPort('127.0.0.1', currentPort);
+
+        // Wait for server to be ready
+        await waitForPort('127.0.0.1', currentPort);
     });
 
     afterEach(async () => {
@@ -43,7 +43,7 @@ describe('MQTT Integration Tests', () => {
             if (server.running) {
                 await server.stop();
                 if (currentPort) {
-                    try { await waitForPortClosed('127.0.0.1', currentPort); } catch {}
+                    try { await waitForPortClosed('127.0.0.1', currentPort); } catch { }
                 }
             }
             await server.close();
@@ -60,7 +60,7 @@ describe('MQTT Integration Tests', () => {
             client = mqtt.connect(`mqtt://127.0.0.1:${currentPort}`);
 
             client.on('connect', () => {
-                
+
                 // Subscribe to a test topic
                 client.subscribe('test/integration', (err: Error | null) => {
                     if (err) {
@@ -68,16 +68,16 @@ describe('MQTT Integration Tests', () => {
                         reject(err);
                         return;
                     }
-                    
+
                     // Publish a message through our server API
                     server.publish('test/integration', 'Hello from API!')
-                        .then(() => {})
+                        .then(() => { })
                         .catch(reject);
                 });
             });
 
             client.on('message', (topic: string, payload: Buffer) => {
-                
+
                 try {
                     expect(topic).to.equal('test/integration');
                     expect(payload.toString()).to.equal('Hello from API!');
@@ -109,7 +109,7 @@ describe('MQTT Integration Tests', () => {
             client = mqtt.connect(`mqtt://127.0.0.1:${currentPort}`);
 
             client.on('connect', () => {
-                
+
                 // Subscribe to a test topic
                 client.subscribe('test/multi', (err: Error | null) => {
                     if (err) {
@@ -117,7 +117,7 @@ describe('MQTT Integration Tests', () => {
                         reject(err);
                         return;
                     }
-                    
+
                     // Publish multiple messages
                     Promise.all([
                         server.publish('test/multi', 'Message 1'),
@@ -129,7 +129,7 @@ describe('MQTT Integration Tests', () => {
 
             client.on('message', (topic: string, payload: Buffer) => {
                 receivedMessages++;
-                
+
                 if (receivedMessages === expectedMessages) {
                     clearTimeout(timeout);
                     resolve();

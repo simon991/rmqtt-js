@@ -21,7 +21,7 @@ describe('MQTT Server Authentication', () => {
             await server.stop();
             // ensure the port is actually closed before ending the test
             if (currentPort) {
-                try { await waitForPortClosed('127.0.0.1', currentPort); } catch {}
+                try { await waitForPortClosed('127.0.0.1', currentPort); } catch { }
             }
         }
         server.close();
@@ -33,22 +33,22 @@ describe('MQTT Server Authentication', () => {
     function checkPortListening(host: string, port: number): Promise<boolean> {
         return new Promise((resolve) => {
             const socket = new net.Socket();
-            
+
             socket.setTimeout(1000);
             socket.on('connect', () => {
                 socket.destroy();
                 resolve(true);
             });
-            
+
             socket.on('timeout', () => {
                 socket.destroy();
                 resolve(false);
             });
-            
+
             socket.on('error', () => {
                 resolve(false);
             });
-            
+
             socket.connect(port, host);
         });
     }
@@ -80,7 +80,7 @@ describe('MQTT Server Authentication', () => {
         });
     }
 
-    it('should allow connections when authentication callback returns allow: true', async function() {
+    it('should allow connections when authentication callback returns allow: true', async function () {
         this.timeout(15000); // Increased timeout
 
         return new Promise<void>((resolve, reject) => {
@@ -95,7 +95,7 @@ describe('MQTT Server Authentication', () => {
             server.setHooks({
                 onClientAuthenticate: (authRequest: AuthenticationRequest): AuthenticationResult => {
                     authRequestReceived = true;
-                    
+
                     // Verify the authentication request has expected fields
                     expect(authRequest).to.have.property('clientId');
                     expect(authRequest).to.have.property('username');
@@ -134,7 +134,7 @@ describe('MQTT Server Authentication', () => {
 
                 expect(authRequestReceived).to.be.true;
                 expect(result.success).to.be.true;
-                
+
                 if (result.client) {
                     result.client.end();
                 }
@@ -147,7 +147,7 @@ describe('MQTT Server Authentication', () => {
         });
     });
 
-    it('should deny connections when authentication callback returns allow: false', async function() {
+    it('should deny connections when authentication callback returns allow: false', async function () {
         this.timeout(10000);
 
         return new Promise<void>((resolve, reject) => {
@@ -162,7 +162,7 @@ describe('MQTT Server Authentication', () => {
             server.setHooks({
                 onClientAuthenticate: (authRequest: AuthenticationRequest): AuthenticationResult => {
                     authRequestReceived = true;
-                    
+
                     return {
                         allow: false,
                         superuser: false,
@@ -197,7 +197,7 @@ describe('MQTT Server Authentication', () => {
         });
     });
 
-    it('should authenticate with username and password', async function() {
+    it('should authenticate with username and password', async function () {
         this.timeout(10000);
 
         return new Promise<void>((resolve, reject) => {
@@ -212,7 +212,7 @@ describe('MQTT Server Authentication', () => {
             server.setHooks({
                 onClientAuthenticate: (request: AuthenticationRequest): AuthenticationResult => {
                     authRequest = request;
-                    
+
                     // Check for valid credentials
                     if (request.username === 'testuser' && request.password === 'testpass') {
                         return {
@@ -221,7 +221,7 @@ describe('MQTT Server Authentication', () => {
                             reason: 'Valid credentials'
                         };
                     }
-                    
+
                     return {
                         allow: false,
                         superuser: false,
@@ -252,7 +252,7 @@ describe('MQTT Server Authentication', () => {
                 expect(validResult.success).to.be.true;
                 expect(authRequest?.username).to.equal('testuser');
                 expect(authRequest?.password).to.equal('testpass');
-                
+
                 if (validResult.client) {
                     validResult.client.end();
                 }
@@ -272,7 +272,7 @@ describe('MQTT Server Authentication', () => {
         });
     });
 
-    it('should allow connections when authentication callback returns a Promise that resolves', async function() {
+    it('should allow connections when authentication callback returns a Promise that resolves', async function () {
         this.timeout(15000);
 
         return new Promise<void>((resolve, reject) => {
@@ -308,7 +308,7 @@ describe('MQTT Server Authentication', () => {
         });
     });
 
-    it('should deny connections when authentication callback Promise rejects', async function() {
+    it('should deny connections when authentication callback Promise rejects', async function () {
         this.timeout(15000);
 
         return new Promise<void>((resolve, reject) => {
@@ -341,7 +341,7 @@ describe('MQTT Server Authentication', () => {
         });
     });
 
-    it('should handle JWT-like token authentication', async function() {
+    it('should handle JWT-like token authentication', async function () {
         this.timeout(10000);
 
         return new Promise<void>((resolve, reject) => {
@@ -356,7 +356,7 @@ describe('MQTT Server Authentication', () => {
             server.setHooks({
                 onClientAuthenticate: (request: AuthenticationRequest): AuthenticationResult => {
                     jwtAuthRequest = request;
-                    
+
                     // Check for JWT-like password
                     if (request.password?.startsWith('eyJ')) {
                         // Simple JWT validation - in real world, use proper JWT library
@@ -369,7 +369,7 @@ describe('MQTT Server Authentication', () => {
                             };
                         }
                     }
-                    
+
                     return {
                         allow: false,
                         superuser: false,
@@ -392,7 +392,7 @@ describe('MQTT Server Authentication', () => {
 
                 // Test with JWT-like token
                 const jwtToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VybmFtZSI6InRlc3QifQ.signature';
-                
+
                 const jwtResult = await attemptConnection({
                     clientId: 'test-jwt-client',
                     username: 'testuser',
@@ -401,7 +401,7 @@ describe('MQTT Server Authentication', () => {
 
                 expect(jwtResult.success).to.be.true;
                 expect(jwtAuthRequest?.password).to.equal(jwtToken);
-                
+
                 if (jwtResult.client) {
                     jwtResult.client.end();
                 }
@@ -421,7 +421,7 @@ describe('MQTT Server Authentication', () => {
         });
     });
 
-    it('should handle authentication callback timeout gracefully', async function() {
+    it('should handle authentication callback timeout gracefully', async function () {
         this.timeout(15000); // Longer timeout for this test
 
         return new Promise<void>((resolve, reject) => {
@@ -473,7 +473,7 @@ describe('MQTT Server Authentication', () => {
         });
     });
 
-    it('should set superuser flag correctly', async function() {
+    it('should set superuser flag correctly', async function () {
         this.timeout(10000);
 
         return new Promise<void>((resolve, reject) => {
@@ -486,7 +486,7 @@ describe('MQTT Server Authentication', () => {
             server.setHooks({
                 onClientAuthenticate: (request: AuthenticationRequest): AuthenticationResult => {
                     const isAdmin = request.username === 'admin';
-                    
+
                     return {
                         allow: true,
                         superuser: isAdmin,
@@ -515,7 +515,7 @@ describe('MQTT Server Authentication', () => {
                 }, currentPort);
 
                 expect(adminResult.success).to.be.true;
-                
+
                 if (adminResult.client) {
                     adminResult.client.end();
                 }
@@ -538,7 +538,7 @@ describe('MQTT Server Authentication', () => {
         });
     });
 
-    it('should handle missing authentication callback gracefully', async function() {
+    it('should handle missing authentication callback gracefully', async function () {
         this.timeout(10000);
 
         return new Promise<void>((resolve, reject) => {

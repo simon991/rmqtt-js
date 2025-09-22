@@ -1189,5 +1189,3 @@ impl Handler for JavaScriptHookHandler {
         (true, acc)
     }
 }
-// moved from src/hooks.rs
-// ... file contents preserved ...

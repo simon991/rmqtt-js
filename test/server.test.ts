@@ -20,15 +20,15 @@ describe("MQTT Server", () => {
         await server.start(config);
         assert.strictEqual(server.running, true);
 
-    // Wait for server to be ready
-    await waitForPort('127.0.0.1', currentPort);
+        // Wait for server to be ready
+        await waitForPort('127.0.0.1', currentPort);
 
         // Test that the port is actually listening
-    const isListening = await checkPortListening("127.0.0.1", currentPort);
-    assert.strictEqual(isListening, true, `Server should be listening on port ${currentPort}`);
+        const isListening = await checkPortListening("127.0.0.1", currentPort);
+        assert.strictEqual(isListening, true, `Server should be listening on port ${currentPort}`);
 
-    await server.stop();
-    try { await waitForPortClosed('127.0.0.1', currentPort); } catch {}
+        await server.stop();
+        try { await waitForPortClosed('127.0.0.1', currentPort); } catch { }
         assert.strictEqual(server.running, false);
 
         server.close();
@@ -45,8 +45,8 @@ describe("MQTT Server", () => {
         await server.publish("test/topic", "Hello, World!", { qos: 0, retain: false });
         await server.publish("test/topic", Buffer.from("Binary data"), { qos: 1 });
 
-    await server.stop();
-    try { await waitForPortClosed('127.0.0.1', currentPort); } catch {}
+        await server.stop();
+        try { await waitForPortClosed('127.0.0.1', currentPort); } catch { }
         server.close();
     });
 
@@ -109,8 +109,8 @@ describe("MQTT Server", () => {
             /Server is already running/
         );
 
-    await server.stop();
-    try { await waitForPortClosed('127.0.0.1', currentPort); } catch {}
+        await server.stop();
+        try { await waitForPortClosed('127.0.0.1', currentPort); } catch { }
         server.close();
     });
 
@@ -160,14 +160,14 @@ describe("MQTT Server", () => {
 function checkPortListening(host: string, port: number): Promise<boolean> {
     return new Promise((resolve) => {
         const socket = new net.Socket();
-        
+
         const timeout = setTimeout(() => {
             socket.destroy();
             resolve(false);
         }, 1000);
 
         socket.setTimeout(1000);
-        
+
         socket.on('connect', () => {
             clearTimeout(timeout);
             socket.destroy();

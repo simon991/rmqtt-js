@@ -25,7 +25,7 @@ describe("publish authorization hook", function () {
       if (server?.running) {
         await server.stop();
         if (port) {
-          try { await waitForPortClosed("127.0.0.1", port); } catch {}
+          try { await waitForPortClosed("127.0.0.1", port); } catch { }
         }
       }
     } finally {
@@ -67,8 +67,8 @@ describe("publish authorization hook", function () {
       client.end(true);
     }
 
-  assert.ok(received, "Expected to receive a message");
-  assert.equal((received as Buffer).toString(), payload.toString());
+    assert.ok(received, "Expected to receive a message");
+    assert.equal((received as Buffer).toString(), payload.toString());
   });
 
   it("denies publish when hook denies", async () => {
