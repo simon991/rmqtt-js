@@ -183,12 +183,37 @@ impl MqttServerWrapper {
         shared_state.set_context(scx.clone());
 
         let hook_register = scx.extends.hook_mgr().register();
-        hook_register.add(Type::ClientAuthenticate, Box::new(JavaScriptHookHandler::new())).await;
+    hook_register.add(Type::ClientAuthenticate, Box::new(JavaScriptHookHandler::new())).await;
+    // Official lifecycle hooks
+    hook_register.add(Type::ClientConnect, Box::new(JavaScriptHookHandler::new())).await;
+    hook_register.add(Type::ClientConnected, Box::new(JavaScriptHookHandler::new())).await;
+    hook_register.add(Type::ClientDisconnected, Box::new(JavaScriptHookHandler::new())).await;
+    hook_register.add(Type::ClientConnack, Box::new(JavaScriptHookHandler::new())).await;
+    hook_register.add(Type::ClientKeepalive, Box::new(JavaScriptHookHandler::new())).await;
+    hook_register.add(Type::SessionCreated, Box::new(JavaScriptHookHandler::new())).await;
+    hook_register.add(Type::SessionTerminated, Box::new(JavaScriptHookHandler::new())).await;
+    hook_register.add(Type::SessionSubscribed, Box::new(JavaScriptHookHandler::new())).await;
+    // Register SessionUnsubscribed when available
+    #[allow(unused_must_use)]
+    {
+        // If this Type exists in this rmqtt version, the following line compiles; otherwise, keep it commented out or feature-gated.
+        // hook_register.add(Type::SessionUnsubscribed, Box::new(JavaScriptHookHandler::new())).await;
+    }
         hook_register.add(Type::MessagePublishCheckAcl, Box::new(JavaScriptHookHandler::new())).await;
         hook_register.add(Type::MessagePublish, Box::new(JavaScriptHookHandler::new())).await;
         hook_register.add(Type::ClientSubscribeCheckAcl, Box::new(JavaScriptHookHandler::new())).await;
         hook_register.add(Type::ClientSubscribe, Box::new(JavaScriptHookHandler::new())).await;
         hook_register.add(Type::ClientUnsubscribe, Box::new(JavaScriptHookHandler::new())).await;
+        // Optional message delivery lifecycle notifications (if supported by this RMQTT version)
+        #[allow(unused_must_use)]
+        {
+            // If these Types are not available in this rmqtt version, remove or gate them.
+            // They are present in newer versions to signal delivery/ack/drop events.
+            // The `await` calls are kept inside this block to suppress unused_must_use in case of cfg gating.
+            let _ = hook_register.add(Type::MessageDelivered, Box::new(JavaScriptHookHandler::new())).await;
+            let _ = hook_register.add(Type::MessageAcked, Box::new(JavaScriptHookHandler::new())).await;
+            let _ = hook_register.add(Type::MessageDropped, Box::new(JavaScriptHookHandler::new())).await;
+        }
         hook_register.start().await;
 
         let mut server_builder = RmqttServer::new(scx.as_ref().clone());

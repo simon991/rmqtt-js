@@ -1,6 +1,6 @@
 "use strict";
 
-import { MessageFrom, MessageInfo, MqttMessage, QoS, SessionInfo, SubscriptionInfo, UnsubscriptionInfo } from "./types";
+import { MessageFrom, MessageInfo, MqttMessage, QoS, SessionInfo, SubscriptionInfo, UnsubscriptionInfo, ConnectInfo, ConnackInfo } from "./types";
 
 export interface AuthenticationRequest {
   clientId: string;
@@ -41,6 +41,18 @@ export interface HookCallbacks {
   onMessagePublish?: (session: SessionInfo | null, from: MessageFrom, message: MessageInfo) => void;
   onClientSubscribe?: (session: SessionInfo | null, subscription: SubscriptionInfo) => void;
   onClientUnsubscribe?: (session: SessionInfo | null, unsubscription: UnsubscriptionInfo) => void;
+  onMessageDelivered?: (session: SessionInfo | null, from: MessageFrom, message: MessageInfo) => void;
+  onMessageAcked?: (session: SessionInfo | null, from: MessageFrom, message: MessageInfo) => void;
+  onMessageDropped?: (session: SessionInfo | null, from: MessageFrom | null, message: MessageInfo, info?: { reason?: string }) => void;
+  // Lifecycle and session hooks following RMQTT events
+  onClientConnect?: (info: ConnectInfo) => void;
+  onClientConnack?: (info: ConnackInfo) => void;
+  onClientConnected?: (session: SessionInfo) => void;
+  onClientDisconnected?: (session: SessionInfo, info?: { reason?: string }) => void;
+  onSessionCreated?: (session: SessionInfo) => void;
+  onSessionSubscribed?: (session: SessionInfo, subscription: SubscriptionInfo) => void;
+  onSessionUnsubscribed?: (session: SessionInfo, unsubscription: UnsubscriptionInfo) => void;
+  onSessionTerminated?: (session: SessionInfo, info?: { reason?: string }) => void;
 }
 
 export type MessagePublishHook = (session: SessionInfo | null, from: MessageFrom, message: MessageInfo) => void;

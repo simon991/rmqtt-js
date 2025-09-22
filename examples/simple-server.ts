@@ -138,6 +138,15 @@ async function main() {
                     }
                 }
             },
+            onMessageDelivered: (_session, from, message) => {
+                console.log(`✅ Delivered: ${message.topic} (from ${from.type})`);
+            },
+            onMessageAcked: (_session, from, message) => {
+                console.log(`📝 Acked: ${message.topic} (from ${from.type})`);
+            },
+            onMessageDropped: (_session, from, message, info) => {
+                console.warn(`🗑️  Dropped: ${message.topic} (from ${from?.type ?? 'unknown'}) reason=${info?.reason ?? 'n/a'}`);
+            },
             onClientSubscribe: (session, subscription) => {
                 console.log(`📝 Client subscribed to: "${subscription.topicFilter}" (QoS ${subscription.qos})`);
 

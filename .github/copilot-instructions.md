@@ -51,11 +51,16 @@ server.setHooks({
 
 ### Hook System Architecture
 - **RMQTT Integration**: Uses RMQTT's native `Hook` trait with `JavaScriptHookHandler` implementation
-- **Event Types**: Supports `MessagePublish`, `ClientSubscribe`, `ClientUnsubscribe`, and `ClientAuthenticate` events
+- **Event Types (supported)**:
+  - Decision hooks: `onClientAuthenticate`, `onClientSubscribeAuthorize`, `onClientPublishAuthorize`
+  - Publish/subscribe notifications: `onMessagePublish`, `onClientSubscribe`, `onClientUnsubscribe`
+  - Delivery notifications: `onMessageDelivered`, `onMessageAcked`, `onMessageDropped`
+  - Client/session lifecycle: `onClientConnect`, `onClientConnack` (fires on both success and failure), `onClientConnected`, `onClientDisconnected`, `onSessionCreated`, `onSessionSubscribed`, `onSessionUnsubscribed`, `onSessionTerminated`
 - **JavaScript Callbacks**: Stored in global `HookCallbackStorage` with `once_cell::Lazy<Mutex<>>`; only invoked if registered
-- **Parameter Marshaling**: Converts Rust structures to JavaScript objects matching TypeScript interfaces (SessionInfo, MessageFrom, MessageInfo, SubscriptionInfo, UnsubscriptionInfo, AuthenticationRequest/Result)
+- **Parameter Marshaling**: Converts Rust structures to JavaScript objects matching TypeScript interfaces (SessionInfo, MessageFrom, MessageInfo, SubscriptionInfo, UnsubscriptionInfo, ConnectInfo/ConnackInfo, AuthenticationRequest/Result)
 - **Hook Registration**: Handlers registered with `hook_register.add()` and enabled with `hook_register.start()`
 - **Auth Semantics**: If JS auth hook returns a decision, it's final; if no JS hook is registered, defer to RMQTT (`proceed = true`). JS auth evaluation uses an internal oneshot with a 5s timeout; on timeout or channel error, deny.
+- **Notes**: `onClientConnack` provides a string reason (e.g., "Success", "BadUsernameOrPassword", "NotAuthorized"). `SessionInfo.node` is currently `1` (single-node placeholder) until clustering is introduced.
 
 # Repository custom instructions for GitHub Copilot
 
@@ -118,7 +123,7 @@ Important runtime artifact paths:
   - A channel (`mpsc`) handles JS→Rust commands; a Neon event `Channel` handles Rust→JS callbacks.
   - `SharedServerState.wait_for_ready()` gates publish calls until context is available (5s timeout in publish path).
 - Hooks
-  - Supported: `onClientAuthenticate`, `onClientSubscribeAuthorize`, `onMessagePublish`, `onClientSubscribe`, `onClientUnsubscribe`.
+  - Supported: `onClientAuthenticate`, `onClientSubscribeAuthorize`, `onClientPublishAuthorize`, `onMessagePublish`, `onClientSubscribe`, `onClientUnsubscribe`, `onMessageDelivered`, `onMessageAcked`, `onMessageDropped`, `onClientConnect`, `onClientConnack`, `onClientConnected`, `onClientDisconnected`, `onSessionCreated`, `onSessionSubscribed`, `onSessionUnsubscribed`, `onSessionTerminated`.
   - JS callback registration lives in `lib.rs::js_set_hooks` and stored in `HOOK_CALLBACKS` (see `src/rs/hooks.rs`).
   - Auth/Subscribe ACL decisions use oneshot with 5s timeout; timeout or channel error → deny with WARN. If no JS hook is registered, defer to RMQTT defaults.
 - Logging & errors

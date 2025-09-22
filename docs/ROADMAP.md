@@ -12,15 +12,7 @@ This roadmap prioritizes features and improvements of this MQTT server (Neon + R
 
 ## P0 — Now
 
-1) Client lifecycle hooks (connect/ready/disconnect/error)
-- What: emit `client`, `clientReady`, `clientDisconnect`, `clientError`, `connectionError`. We currently expose only publish/subscribe events and auth/subscribe ACL.
-- Scope:
-  - TypeScript: Add optional hooks `onClientConnected`, `onClientReady`, `onClientDisconnected`, `onClientError`, `onConnectionError` (non-breaking optional).
-  - Rust: Capture RMQTT equivalents and dispatch via `Channel`.
-  - Files: `src/rs/hooks.rs`, `src/lib.rs`, `src/ts/api/hooks.ts` (types), tests.
-- Acceptance: Hooks fire reliably with minimal payloads (clientId, username, remoteAddr, reason if applicable).
-
-2) Basic metrics and introspection
+1) Basic metrics and introspection
 - What: Expose important metrics such as `connectedClients`. So far, we don’t surface metrics beyond `running`.
 - Scope:
   - TS API: Add `getStats()` returning `{ connectedClients: number; startTime: number; uptimeMs: number; }`.
@@ -124,6 +116,13 @@ This roadmap prioritizes features and improvements of this MQTT server (Neon + R
   - TS Config: `cluster?: { enabled: boolean; backend: 'redis' | 'nats' | 'custom'; options?: ... }` (subject to RMQTT support).
   - Docs: deployment patterns for HA and horizontal scaling.
 - Acceptance: Multi-node tests/benchmarks demonstrate cross-instance routing.
+
+
+1) Client lifecycle hooks (connect/connack/connected/disconnected) — Delivered
+- Status: Implemented and tested: `onClientConnect`, `onClientConnack`, `onClientConnected`, `onClientDisconnected`, plus session lifecycle (`onSessionCreated`, `onSessionSubscribed`, `onSessionUnsubscribed`, `onSessionTerminated`) and message delivery lifecycle (`onMessageDelivered`, `onMessageAcked`, `onMessageDropped`).
+- Follow-ups:
+  - Populate `MessageFrom.clientId/username` when origin is a client (enhanced attribution).
+  - Thread real `node` id into `SessionInfo`/`MessageFrom` when clustering/multi-node is enabled (currently placeholder `1`).
 
 1)  Pluggable JS plugin system (nice-to-have)
 - Why: Encourage community extensions (auth providers, enrichers, bridges) beyond ad-hoc hooks.

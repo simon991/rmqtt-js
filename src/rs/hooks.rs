@@ -1,5 +1,5 @@
 use std::time::Duration;
-use std::collections::HashMap;
+use std::collections::{HashMap};
 use std::hash::{Hash, Hasher};
 use std::sync::{Arc, Mutex};
 
@@ -20,6 +20,8 @@ pub(crate) static HOOK_CALLBACKS: Lazy<std::sync::Mutex<HookCallbackStorage>> =
 static PUBLISH_DECISIONS: Lazy<Mutex<HashMap<String, PublishDecision>>> =
     Lazy::new(|| Mutex::new(HashMap::new()));
 
+// Using official RMQTT lifecycle hooks; no duplicate tracking needed
+
 #[inline]
 fn make_publish_key(p: &rmqtt::types::Publish) -> String {
     let mut hasher = std::collections::hash_map::DefaultHasher::new();
@@ -39,6 +41,19 @@ pub(crate) struct HookCallbackStorage {
     pub on_client_authenticate: Option<neon::handle::Root<JsFunction>>,
     pub on_client_subscribe_authorize: Option<neon::handle::Root<JsFunction>>,
     pub on_client_publish_authorize: Option<neon::handle::Root<JsFunction>>,
+    // Lifecycle hooks aligned with RMQTT
+    pub on_client_connect: Option<neon::handle::Root<JsFunction>>,
+    pub on_client_connack: Option<neon::handle::Root<JsFunction>>,
+    pub on_client_connected: Option<neon::handle::Root<JsFunction>>,
+    pub on_client_disconnected: Option<neon::handle::Root<JsFunction>>,
+    pub on_session_created: Option<neon::handle::Root<JsFunction>>,
+    pub on_session_subscribed: Option<neon::handle::Root<JsFunction>>,
+    pub on_session_unsubscribed: Option<neon::handle::Root<JsFunction>>,
+    pub on_session_terminated: Option<neon::handle::Root<JsFunction>>,
+    // Message delivery lifecycle
+    pub on_message_delivered: Option<neon::handle::Root<JsFunction>>,
+    pub on_message_acked: Option<neon::handle::Root<JsFunction>>,
+    pub on_message_dropped: Option<neon::handle::Root<JsFunction>>,
 }
 
 impl HookCallbackStorage {
@@ -51,6 +66,17 @@ impl HookCallbackStorage {
             on_client_authenticate: None,
             on_client_subscribe_authorize: None,
             on_client_publish_authorize: None,
+            on_client_connect: None,
+            on_client_connack: None,
+            on_client_connected: None,
+            on_client_disconnected: None,
+            on_session_created: None,
+            on_session_subscribed: None,
+            on_session_unsubscribed: None,
+            on_session_terminated: None,
+            on_message_delivered: None,
+            on_message_acked: None,
+            on_message_dropped: None,
         }
     }
 
@@ -62,6 +88,17 @@ impl HookCallbackStorage {
         self.on_client_authenticate = None;
         self.on_client_subscribe_authorize = None;
         self.on_client_publish_authorize = None;
+        self.on_client_connect = None;
+        self.on_client_connack = None;
+        self.on_client_connected = None;
+        self.on_client_disconnected = None;
+        self.on_session_created = None;
+        self.on_session_subscribed = None;
+        self.on_session_unsubscribed = None;
+        self.on_session_terminated = None;
+        self.on_message_delivered = None;
+        self.on_message_acked = None;
+        self.on_message_dropped = None;
     }
 }
 
@@ -98,6 +135,367 @@ impl JavaScriptHookHandler {
         Self {}
     }
 
+    fn emit_message_event(
+        &self,
+        kind: &str,
+        session_info: Option<(String, Option<String>, Option<String>)>,
+        from_dbg: Option<String>,
+        publish: &rmqtt::types::Publish,
+        reason: Option<String>,
+    ) {
+        if let Ok(callbacks) = HOOK_CALLBACKS.lock() {
+            let cb_root_opt = match kind {
+                "delivered" => callbacks.on_message_delivered.as_ref(),
+                "acked" => callbacks.on_message_acked.as_ref(),
+                "dropped" => callbacks.on_message_dropped.as_ref(),
+                _ => None,
+            };
+            if cb_root_opt.is_none() { return; }
+            let channel = callbacks.channel.clone();
+            if channel.is_none() { return; }
+
+            // Clone payload fields
+            let topic = publish.topic.to_string();
+            let payload = publish.payload.to_vec();
+            let qos = publish.qos as u8;
+            let retain = publish.retain;
+            let dup = publish.dup;
+            let create_time = publish.create_time.unwrap_or(0);
+
+            // Clone minimal session representation
+            let (client_id, username, remote_addr) = session_info.unwrap_or((String::new(), None, None));
+
+            let kind_string = kind.to_string();
+            let reason_clone = reason.clone();
+            let from_dbg_clone = from_dbg.clone();
+
+            if let Some(channel) = channel {
+                let _ = channel.try_send(move |mut cx| {
+                    if let Ok(callbacks) = HOOK_CALLBACKS.lock() {
+                        let cb_root_opt = match kind_string.as_str() {
+                            "delivered" => callbacks.on_message_delivered.as_ref(),
+                            "acked" => callbacks.on_message_acked.as_ref(),
+                            "dropped" => callbacks.on_message_dropped.as_ref(),
+                            _ => None,
+                        };
+                        if let Some(cb_root) = cb_root_opt {
+                            let cb = cb_root.to_inner(&mut cx);
+                            // session
+                            let s_val: Handle<JsValue> = if client_id.is_empty() {
+                                cx.null().upcast()
+                            } else {
+                                let s = cx.empty_object();
+                                let node_js = cx.number(1f64);
+                                let client_js = cx.string(client_id.clone());
+                                let user_js: Handle<JsValue> = match username.as_ref() { Some(u)=>cx.string(u).upcast(), None=>cx.null().upcast() };
+                                let remote_js: Handle<JsValue> = match remote_addr.as_ref() { Some(r)=>cx.string(r).upcast(), None=>cx.null().upcast() };
+                                s.set(&mut cx, "node", node_js).ok();
+                                s.set(&mut cx, "clientId", client_js).ok();
+                                s.set(&mut cx, "username", user_js).ok();
+                                s.set(&mut cx, "remoteAddr", remote_js).ok();
+                                s.upcast()
+                            };
+                            // from
+                            let from_obj = cx.empty_object();
+                            // best-effort mapping using Debug string of From
+                            let t = if let Some(ref d) = from_dbg_clone {
+                                if d.contains("Client") { "client" } else if d.contains("Bridge") { "bridge" } else if d.contains("Admin") { "admin" } else if d.contains("LastWill") { "lastwill" } else if d.contains("System") { "system" } else { "custom" }
+                            } else { "system" };
+                            let t_js = cx.string(t);
+                            let node_js2 = cx.number(1f64);
+                            let client_empty = cx.string("");
+                            let username_null: Handle<JsValue> = cx.null().upcast();
+                            let remote_null: Handle<JsValue> = cx.null().upcast();
+                            from_obj.set(&mut cx, "type", t_js).ok();
+                            from_obj.set(&mut cx, "node", node_js2).ok();
+                            from_obj.set(&mut cx, "clientId", client_empty).ok();
+                            from_obj.set(&mut cx, "username", username_null).ok();
+                            from_obj.set(&mut cx, "remoteAddr", remote_null).ok();
+
+                            // message
+                            let msg = cx.empty_object();
+                            let topic_js = cx.string(topic);
+                            let mut buf = cx.buffer(payload.len())?;
+                            buf.as_mut_slice(&mut cx).copy_from_slice(&payload);
+                            let qos_js = cx.number(qos as f64);
+                            let retain_js = cx.boolean(retain);
+                            let dup_js = cx.boolean(dup);
+                            let ct_js = cx.number(create_time as f64);
+                            msg.set(&mut cx, "topic", topic_js).ok();
+                            msg.set(&mut cx, "payload", buf).ok();
+                            msg.set(&mut cx, "qos", qos_js).ok();
+                            msg.set(&mut cx, "retain", retain_js).ok();
+                            msg.set(&mut cx, "dup", dup_js).ok();
+                            msg.set(&mut cx, "createTime", ct_js).ok();
+
+                            if kind_string.as_str() == "dropped" {
+                                let info = cx.empty_object();
+                                if let Some(r) = reason_clone.as_ref() {
+                                    let r_js = cx.string(r.as_str());
+                                    info.set(&mut cx, "reason", r_js).ok();
+                                }
+                                let _ = cb.call_with(&cx).arg(s_val).arg(from_obj).arg(msg).arg(info).apply::<JsUndefined, _>(&mut cx);
+                            } else {
+                                let _ = cb.call_with(&cx).arg(s_val).arg(from_obj).arg(msg).apply::<JsUndefined, _>(&mut cx);
+                            }
+                        }
+                    }
+                    Ok(())
+                });
+            }
+        }
+    }
+
+    fn emit_client_connect(&self, info: &rmqtt::types::ConnectInfo) {
+        if let Ok(callbacks) = HOOK_CALLBACKS.lock() {
+            if callbacks.on_client_connect.is_none() { return; }
+            let channel = callbacks.channel.clone();
+            if channel.is_none() { return; }
+            let id = info.id();
+            let client_id = id.client_id.to_string();
+            let username = info.username().map(|u| u.to_string());
+            let remote_addr = id.remote_addr.map(|a| a.to_string());
+            let keep_alive = info.keep_alive();
+            let proto_ver = info.proto_ver();
+            let clean_start = info.clean_start();
+            if let Some(channel) = channel {
+                let _ = channel.try_send(move |mut cx| {
+                    if let Ok(callbacks) = HOOK_CALLBACKS.lock() {
+                        if let Some(cb_root) = &callbacks.on_client_connect {
+                            let cb = cb_root.to_inner(&mut cx);
+                            let obj = cx.empty_object();
+                            let node_js = cx.number(1f64);
+                            let client_js = cx.string(client_id);
+                            let user_js: Handle<JsValue> = match username { Some(u)=>cx.string(u).upcast(), None=>cx.null().upcast()};
+                            let remote_js: Handle<JsValue> = match remote_addr { Some(r)=>cx.string(r).upcast(), None=>cx.null().upcast()};
+                            let keep_alive_js = cx.number(keep_alive as f64);
+                            let proto_js = cx.number(proto_ver as f64);
+                            let clean_start_js = cx.boolean(clean_start);
+                            obj.set(&mut cx, "node", node_js).ok();
+                            obj.set(&mut cx, "clientId", client_js).ok();
+                            obj.set(&mut cx, "username", user_js).ok();
+                            obj.set(&mut cx, "remoteAddr", remote_js).ok();
+                            obj.set(&mut cx, "keepAlive", keep_alive_js).ok();
+                            obj.set(&mut cx, "protoVer", proto_js).ok();
+                            obj.set(&mut cx, "cleanStart", clean_start_js).ok();
+                            let _ = cb.call_with(&cx).arg(obj).apply::<JsUndefined, _>(&mut cx);
+                        }
+                    }
+                    Ok(())
+                });
+            }
+        }
+    }
+
+    fn emit_client_connack(&self, info: &rmqtt::types::ConnectInfo, reason: &rmqtt::types::ConnectAckReason) {
+        if let Ok(callbacks) = HOOK_CALLBACKS.lock() {
+            if callbacks.on_client_connack.is_none() { return; }
+            let channel = callbacks.channel.clone();
+            if channel.is_none() { return; }
+            let id = info.id();
+            let client_id = id.client_id.to_string();
+            let username = info.username().map(|u| u.to_string());
+            let remote_addr = id.remote_addr.map(|a| a.to_string());
+            let keep_alive = info.keep_alive();
+            let proto_ver = info.proto_ver();
+            let clean_start = info.clean_start();
+            let connack_str = format!("{:?}", reason);
+            if let Some(channel) = channel {
+                let _ = channel.try_send(move |mut cx| {
+                    if let Ok(callbacks) = HOOK_CALLBACKS.lock() {
+                        if let Some(cb_root) = &callbacks.on_client_connack {
+                            let cb = cb_root.to_inner(&mut cx);
+                            let obj = cx.empty_object();
+                            let node_js = cx.number(1f64);
+                            let client_js = cx.string(client_id);
+                            let user_js: Handle<JsValue> = match username { Some(u)=>cx.string(u).upcast(), None=>cx.null().upcast()};
+                            let remote_js: Handle<JsValue> = match remote_addr { Some(r)=>cx.string(r).upcast(), None=>cx.null().upcast()};
+                            let keep_alive_js = cx.number(keep_alive as f64);
+                            let proto_js = cx.number(proto_ver as f64);
+                            let clean_start_js = cx.boolean(clean_start);
+                            let connack_js = cx.string(connack_str);
+                            obj.set(&mut cx, "node", node_js).ok();
+                            obj.set(&mut cx, "clientId", client_js).ok();
+                            obj.set(&mut cx, "username", user_js).ok();
+                            obj.set(&mut cx, "remoteAddr", remote_js).ok();
+                            obj.set(&mut cx, "keepAlive", keep_alive_js).ok();
+                            obj.set(&mut cx, "protoVer", proto_js).ok();
+                            obj.set(&mut cx, "cleanStart", clean_start_js).ok();
+                            obj.set(&mut cx, "connAck", connack_js).ok();
+                            let _ = cb.call_with(&cx).arg(obj).apply::<JsUndefined, _>(&mut cx);
+                        }
+                    }
+                    Ok(())
+                });
+            }
+        }
+    }
+
+
+    fn emit_session_subscribed(&self, session: &rmqtt::session::Session, subscribe: &rmqtt::types::Subscribe) {
+        if let Ok(callbacks) = HOOK_CALLBACKS.lock() {
+            if callbacks.on_session_subscribed.is_none() { return; }
+            let channel = callbacks.channel.clone();
+            if channel.is_none() { return; }
+            let sess_id = session.id();
+            let client_id = sess_id.client_id.to_string();
+            let username = session.username().map(|u| u.to_string());
+            let remote_addr = sess_id.remote_addr.map(|a| a.to_string());
+            let topic_filter = subscribe.topic_filter.to_string();
+            let qos = subscribe.opts.qos() as u8;
+            if let Some(channel) = channel {
+                let _ = channel.try_send(move |mut cx| {
+                    if let Ok(callbacks) = HOOK_CALLBACKS.lock() {
+                        if let Some(cb_root) = &callbacks.on_session_subscribed {
+                            let cb = cb_root.to_inner(&mut cx);
+                            let s = cx.empty_object();
+                            let node_js = cx.number(1f64);
+                            let client_js = cx.string(client_id);
+                            let user_js: Handle<JsValue> = match username { Some(u)=>cx.string(u).upcast(), None=>cx.null().upcast()};
+                            let remote_js: Handle<JsValue> = match remote_addr { Some(r)=>cx.string(r).upcast(), None=>cx.null().upcast()};
+                            s.set(&mut cx, "node", node_js).ok();
+                            s.set(&mut cx, "clientId", client_js).ok();
+                            s.set(&mut cx, "username", user_js).ok();
+                            s.set(&mut cx, "remoteAddr", remote_js).ok();
+
+                            let sub = cx.empty_object();
+                            let topic_js = cx.string(topic_filter);
+                            let qos_js = cx.number(qos as f64);
+                            sub.set(&mut cx, "topicFilter", topic_js).ok();
+                            sub.set(&mut cx, "qos", qos_js).ok();
+
+                            let _ = cb.call_with(&cx).arg(s).arg(sub).apply::<JsUndefined, _>(&mut cx);
+                        }
+                    }
+                    Ok(())
+                });
+            }
+        }
+    }
+
+    fn emit_session_unsubscribed(&self, session: &rmqtt::session::Session, unsubscribe: &rmqtt::types::Unsubscribe) {
+        if let Ok(callbacks) = HOOK_CALLBACKS.lock() {
+            if callbacks.on_session_unsubscribed.is_none() { return; }
+            let channel = callbacks.channel.clone();
+            if channel.is_none() { return; }
+            let sess_id = session.id();
+            let client_id = sess_id.client_id.to_string();
+            let username = session.username().map(|u| u.to_string());
+            let remote_addr = sess_id.remote_addr.map(|a| a.to_string());
+            let topic_filter = unsubscribe.topic_filter.to_string();
+            if let Some(channel) = channel {
+                let _ = channel.try_send(move |mut cx| {
+                    if let Ok(callbacks) = HOOK_CALLBACKS.lock() {
+                        if let Some(cb_root) = &callbacks.on_session_unsubscribed {
+                            let cb = cb_root.to_inner(&mut cx);
+                            let s = cx.empty_object();
+                            let node_js = cx.number(1f64);
+                            let client_js = cx.string(client_id);
+                            let user_js: Handle<JsValue> = match username { Some(u)=>cx.string(u).upcast(), None=>cx.null().upcast()};
+                            let remote_js: Handle<JsValue> = match remote_addr { Some(r)=>cx.string(r).upcast(), None=>cx.null().upcast()};
+                            s.set(&mut cx, "node", node_js).ok();
+                            s.set(&mut cx, "clientId", client_js).ok();
+                            s.set(&mut cx, "username", user_js).ok();
+                            s.set(&mut cx, "remoteAddr", remote_js).ok();
+
+                            let unsub = cx.empty_object();
+                            let topic_js = cx.string(topic_filter);
+                            unsub.set(&mut cx, "topicFilter", topic_js).ok();
+
+                            let _ = cb.call_with(&cx).arg(s).arg(unsub).apply::<JsUndefined, _>(&mut cx);
+                        }
+                    }
+                    Ok(())
+                });
+            }
+        }
+    }
+
+    fn emit_lifecycle(&self, event: &str, session_opt: Option<&rmqtt::session::Session>, reason: Option<String>) {
+        if let Ok(callbacks) = HOOK_CALLBACKS.lock() {
+            let (cb_opt, expect_session) = match event {
+                "client_connect" => (&callbacks.on_client_connect, false),
+                "client_connack" => (&callbacks.on_client_connack, false),
+                "client_connected" => (&callbacks.on_client_connected, true),
+                "client_disconnected" => (&callbacks.on_client_disconnected, true),
+                "session_created" => (&callbacks.on_session_created, true),
+                "session_subscribed" => (&callbacks.on_session_subscribed, true),
+                "session_unsubscribed" => (&callbacks.on_session_unsubscribed, true),
+                "session_terminated" => (&callbacks.on_session_terminated, true),
+                _ => { return; }
+            };
+            if cb_opt.is_none() { return; }
+            let channel = callbacks.channel.clone();
+            if channel.is_none() { return; }
+            let reason_clone = reason.clone();
+            // Clone minimal representation of session fields
+            let (client_id, username, remote_addr) = session_opt.map(|s| {
+                let id = s.id();
+                (id.client_id.to_string(), s.username().map(|u| u.to_string()), id.remote_addr.map(|a| a.to_string()))
+            }).unwrap_or((String::new(), None, None));
+
+            if let Some(channel) = channel {
+                let event_kind = event.to_string();
+                let _ = channel.try_send(move |mut cx| {
+                    if let Ok(callbacks) = HOOK_CALLBACKS.lock() {
+                        let cb_root = match event_kind.as_str() {
+                            "client_connect" => callbacks.on_client_connect.as_ref(),
+                            "client_connack" => callbacks.on_client_connack.as_ref(),
+                            "client_connected" => callbacks.on_client_connected.as_ref(),
+                            "client_disconnected" => callbacks.on_client_disconnected.as_ref(),
+                            "session_created" => callbacks.on_session_created.as_ref(),
+                            "session_subscribed" => callbacks.on_session_subscribed.as_ref(),
+                            "session_unsubscribed" => callbacks.on_session_unsubscribed.as_ref(),
+                            "session_terminated" => callbacks.on_session_terminated.as_ref(),
+                            _ => None,
+                        };
+                        if let Some(cb_root) = cb_root {
+                            let cb = cb_root.to_inner(&mut cx);
+                            if expect_session {
+                                let s = cx.empty_object();
+                                let node_num = cx.number(1f64);
+                                let client_id_js = cx.string(client_id);
+                                let user_js: Handle<JsValue> = match username { Some(u) => cx.string(u).upcast(), None => cx.null().upcast() };
+                                let remote_js: Handle<JsValue> = match remote_addr { Some(r) => cx.string(r).upcast(), None => cx.null().upcast() };
+                                s.set(&mut cx, "node", node_num).ok();
+                                s.set(&mut cx, "clientId", client_id_js).ok();
+                                s.set(&mut cx, "username", user_js).ok();
+                                s.set(&mut cx, "remoteAddr", remote_js).ok();
+                                if event_kind.as_str() == "client_disconnected" || event_kind.as_str() == "session_terminated" {
+                                    let info = cx.empty_object();
+                                    if let Some(r) = reason_clone.as_ref() {
+                                        let reason_js = cx.string(r);
+                                        info.set(&mut cx, "reason", reason_js).ok();
+                                    }
+                                    let _ = cb.call_with(&cx).arg(s).arg(info).apply::<JsUndefined, _>(&mut cx);
+                                } else {
+                                    let _ = cb.call_with(&cx).arg(s).apply::<JsUndefined, _>(&mut cx);
+                                }
+                            } else {
+                                // Non-session info events (client_connect/connack)
+                                let info = cx.empty_object();
+                                let remote_js: Handle<JsValue> = match remote_addr { Some(r) => cx.string(r).upcast(), None => cx.null().upcast() };
+                                info.set(&mut cx, "remoteAddr", remote_js).ok();
+                                let client_id_js = cx.string(client_id);
+                                info.set(&mut cx, "clientId", client_id_js).ok();
+                                let user_js: Handle<JsValue> = match username { Some(u) => cx.string(u).upcast(), None => cx.null().upcast() };
+                                info.set(&mut cx, "username", user_js).ok();
+                                if let Some(r) = reason_clone.as_ref() {
+                                    let reason_js = cx.string(r);
+                                    info.set(&mut cx, "connAck", reason_js).ok();
+                                }
+                                let _ = cb.call_with(&cx).arg(info).apply::<JsUndefined, _>(&mut cx);
+                            }
+                        }
+                    }
+                    Ok(())
+                });
+            }
+        }
+    }
+
+    // Removed legacy connected emission from ConnectInfo; now using official lifecycle hooks
+
     fn emit_on_message_publish(&self, publish: &rmqtt::types::Publish) {
         if let Ok(callbacks) = HOOK_CALLBACKS.lock() {
             if callbacks.on_message_publish.is_none() { return; }
@@ -117,7 +515,8 @@ impl JavaScriptHookHandler {
                             let cb = cb_root.to_inner(&mut cx);
                             let session = cx.null();
                             let from = cx.empty_object();
-                            let js_from_type = cx.string("System");
+                            // keep type casing consistent with TS: "system"
+                            let js_from_type = cx.string("system");
                             from.set(&mut cx, "type", js_from_type)?;
                             let message = cx.empty_object();
                             let js_topic = cx.string(topic);
@@ -642,6 +1041,8 @@ impl JavaScriptHookHandler {
 impl Handler for JavaScriptHookHandler {
     async fn hook(&self, param: &Parameter, acc: Option<HookResult>) -> ReturnType {
         match param {
+            // Fire connected after we see authenticate parameter (post-evaluation we can't distinguish allow/deny here; auth hook returns allow via result)
+            // We'll emit connected on success path inside call_js_auth_hook.
             Parameter::MessagePublishCheckAcl(session, publish) => {
                 // Default: if no hook registered, allow, except deny $SYS publishes by default
                 let topic_str = publish.topic.to_string();
@@ -706,15 +1107,79 @@ impl Handler for JavaScriptHookHandler {
                         return (false, Some(HookResult::Publish(new_publish)));
                     }
                 }
+                // fallthrough: also emit delivered/acked/dropped handled by dedicated hook params when they occur; nothing to do here
             }
-            Parameter::ClientSubscribe(_session, subscribe) => {
+            // Optional RMQTT events: deliver/ack/drop notifications
+            #[allow(unreachable_patterns)]
+            Parameter::MessageDelivered(session, from, publish) => {
+                let id = session.id();
+                let session_info = (
+                    id.client_id.to_string(),
+                    session.username().map(|u| u.to_string()),
+                    id.remote_addr.map(|a| a.to_string()),
+                );
+                let from_dbg = Some(format!("{:?}", from));
+                self.emit_message_event("delivered", Some(session_info), from_dbg, publish, None);
+            }
+            #[allow(unreachable_patterns)]
+            Parameter::MessageAcked(session, from, publish) => {
+                let id = session.id();
+                let session_info = (
+                    id.client_id.to_string(),
+                    session.username().map(|u| u.to_string()),
+                    id.remote_addr.map(|a| a.to_string()),
+                );
+                let from_dbg = Some(format!("{:?}", from));
+                self.emit_message_event("acked", Some(session_info), from_dbg, publish, None);
+            }
+            #[allow(unreachable_patterns)]
+            Parameter::MessageDropped(session_opt, from_opt, publish, reason) => {
+                let session_info = session_opt.as_ref().map(|id| (
+                    id.client_id.to_string(),
+                    None,
+                    id.remote_addr.map(|a| a.to_string()),
+                ));
+                let from_dbg = Some(format!("{:?}", from_opt));
+                self.emit_message_event("dropped", session_info, from_dbg, publish, Some(format!("{:?}", reason)));
+            }
+            Parameter::ClientSubscribe(_session_ref, subscribe) => {
                 self.emit_on_client_subscribe(subscribe);
+            }
+            Parameter::SessionSubscribed(session_ref, subscribe) => {
+                self.emit_session_subscribed(session_ref, subscribe);
             }
             Parameter::ClientSubscribeCheckAcl(session, subscribe) => {
                 return self.call_js_subscribe_acl_hook(session, subscribe).await;
             }
             Parameter::ClientUnsubscribe(_session, unsubscribe) => {
                 self.emit_on_client_unsubscribe(unsubscribe);
+            }
+            Parameter::SessionUnsubscribed(session_ref, unsubscribe) => {
+                self.emit_session_unsubscribed(session_ref, unsubscribe);
+            }
+            Parameter::ClientConnected(session) => {
+                self.emit_lifecycle("client_connected", Some(session), None);
+            }
+            Parameter::ClientDisconnected(session, reason) => {
+                self.emit_lifecycle("client_disconnected", Some(session), Some(format!("{:?}", reason)));
+            }
+            Parameter::ClientConnack(connect_info, reason) => {
+                self.emit_client_connack(connect_info, reason);
+            }
+            Parameter::ClientConnect(connect_info) => {
+                self.emit_client_connect(connect_info);
+            }
+            Parameter::ClientKeepalive(session, is_ping) => {
+                // We don't surface keepalive to JS hooks by default; if desired later, we can add an onClientKeepalive callback.
+                // For now, treat abnormal keepalive states as client_error if needed. Here we just ignore to avoid noise.
+                let _ = is_ping; // suppress unused
+                let _ = session; // suppress unused
+            }
+            Parameter::SessionCreated(session) => {
+                self.emit_lifecycle("session_created", Some(session), None);
+            }
+            Parameter::SessionTerminated(session, reason) => {
+                self.emit_lifecycle("session_terminated", Some(session), Some(format!("{:?}", reason)));
             }
             Parameter::ClientAuthenticate(connect_info) => {
                 return self.call_js_auth_hook(connect_info).await;

@@ -86,12 +86,23 @@ Listen to broker events in real time — only invoked if you register them.
 
 | Hook                                        | Type                | When it fires        | JS return                                    | Default if not set             | Timeout/error |
 | ------------------------------------------- | ------------------- | -------------------- | -------------------------------------------- | ------------------------------ | ------------- |
+| `onClientConnect(info)`                     | notification        | Server receives CONNECT | `void`                                     | —                              | —             |
 | `onClientAuthenticate(auth)`                | decision            | A client connects    | `{ allow, superuser?, reason? }`             | RMQTT defaults                 | deny          |
 | `onClientSubscribeAuthorize(session, sub)`  | decision            | Client subscribes    | `{ allow, qos?, reason? }`                   | RMQTT defaults                 | deny          |
 | `onClientPublishAuthorize(session, packet)` | decision + mutation | Client publishes     | `{ allow, topic?, payload?, qos?, reason? }` | allow (except `$SYS/*` denied) | deny          |
 | `onMessagePublish(session, from, msg)`      | notification        | Any publish observed | `void`                                       | —                              | —             |
 | `onClientSubscribe(session, sub)`           | notification        | Client subscribes    | `void`                                       | —                              | —             |
 | `onClientUnsubscribe(session, unsub)`       | notification        | Client unsubscribes  | `void`                                       | —                              | —             |
+| `onMessageDelivered(session, from, msg)`    | notification        | Before delivering a message to a client | `void`                        | —                              | —             |
+| `onMessageAcked(session, from, msg)`        | notification        | After client acknowledges a delivered message | `void`                   | —                              | —             |
+| `onMessageDropped(session, from?, msg, info?)` | notification     | Message could not be delivered (dropped) | `void`                       | —                              | —             |
+| `onSessionCreated(session)`                 | notification        | Session created      | `void`                                       | —                              | —             |
+| `onClientConnected(session)`                | notification        | Client connected     | `void`                                       | —                              | —             |
+| `onClientConnack(info)`                     | notification        | CONNACK (success/fail) | `void`                                     | —                              | —             |
+| `onClientDisconnected(session, info?)`      | notification        | Client disconnected  | `void`                                       | —                              | —             |
+| `onSessionSubscribed(session, sub)`         | notification        | Client subscribed    | `void`                                       | —                              | —             |
+| `onSessionUnsubscribed(session, unsub)`     | notification        | Client unsubscribed  | `void`                                       | —                              | —             |
+| `onSessionTerminated(session, info?)`       | notification        | Session terminated   | `void`                                       | —                              | —             |
 
 Auth (JS → Rust decision flow)
 ```ts
@@ -138,6 +149,38 @@ server.setHooks({
   onClientUnsubscribe: (_session, unsub) => console.log("UNSUB", unsub),
 });
 ```
+
+Message delivery notifications
+```ts
+server.setHooks({
+  onMessageDelivered: (_session, from, message) => {
+    console.log(`Delivered: ${message.topic} (from ${from.type})`);
+  },
+  onMessageAcked: (_session, from, message) => {
+    console.log(`Acked: ${message.topic} (from ${from.type})`);
+  },
+  onMessageDropped: (_session, from, message, info) => {
+    console.warn(`Dropped: ${message.topic} (from ${from?.type ?? 'unknown'}) reason=${info?.reason ?? 'n/a'}`);
+  },
+});
+```
+
+Lifecycle notifications
+```ts
+server.setHooks({
+  onClientConnected: (session) => console.log("CONNECTED", session.clientId),
+  // Emitted when broker sends CONNACK (success or failure). Filter non-success if desired.
+  onClientConnack: (info) => console.log("CONNACK", info.clientId, info.connAck),
+  onClientDisconnected: (session, info) => console.log("DISCONNECTED", session.clientId, info?.reason),
+  // Subscribe/session lifecycle
+  onSessionSubscribed: (session, sub) => console.log("SUBSCRIBED", session.clientId, sub.topicFilter),
+});
+```
+
+Notes:
+- `onClientConnack` fires for both success and non-success outcomes. To handle errors only, check `info.connAck !== "Success"`.
+- Typical `connAck` values include: `"Success"`, `"BadUsernameOrPassword"`, `"NotAuthorized"`, and other broker reasons depending on protocol version.
+- The `node` field currently uses a single-node placeholder value of `1`. If/when multi-node/clustering is introduced, this will reflect the real node id.
 
 Publish ACL with optional mutation
 ```ts
@@ -267,8 +310,40 @@ export interface HookCallbacks {
   onMessagePublish?(session: SessionInfo | null, from: MessageFrom, msg: MessageInfo): void;
   onClientSubscribe?(session: SessionInfo | null, sub: SubscriptionInfo): void;
   onClientUnsubscribe?(session: SessionInfo | null, unsub: UnsubscriptionInfo): void;
+  // New delivery hooks
+  onMessageDelivered?(session: SessionInfo | null, from: MessageFrom, message: MessageInfo): void;
+  onMessageAcked?(session: SessionInfo | null, from: MessageFrom, message: MessageInfo): void;
+  onMessageDropped?(session: SessionInfo | null, from: MessageFrom | null, message: MessageInfo, info?: { reason?: string }): void;
+  // New lifecycle hooks
+  onClientConnect?(info: ConnectInfo): void;
+  onClientConnack?(info: ConnackInfo): void;
+  onClientConnected?(session: SessionInfo): void;
+  onClientDisconnected?(session: SessionInfo, info?: { reason?: string }): void;
+  onSessionCreated?(session: SessionInfo): void;
+  onSessionSubscribed?(session: SessionInfo, subscription: SubscriptionInfo): void;
+  onSessionUnsubscribed?(session: SessionInfo, unsubscription: UnsubscriptionInfo): void;
+  onSessionTerminated?(session: SessionInfo, info?: { reason?: string }): void;
+}
+
+// Connection lifecycle payloads
+export interface ConnectInfo {
+  node: number;
+  remoteAddr: string | null;
+  clientId: string;
+  username: string | null;
+  keepAlive: number;
+  protoVer: number;
+  cleanSession?: boolean; // MQTT 3.1/3.1.1
+  cleanStart?: boolean;   // MQTT 5.0
+}
+
+export interface ConnackInfo extends ConnectInfo {
+  connAck: string; // e.g., "Success", "BadUsernameOrPassword", "NotAuthorized"
 }
 ```
+
+Implementation notes:
+- MessageFrom is a best-effort attribution based on RMQTT origin. When the origin is a client, future versions may populate `clientId` and `username` more precisely. If multi-node is planned, threading the real node id into `SessionInfo`/`MessageFrom` early will avoid downstream assumptions.
 
 ## Architecture (how it works)
 

@@ -62,3 +62,19 @@ export interface MultiProtocolOptions {
   tlsKey?: string;
   allowAnonymous?: boolean;
 }
+
+// Event payloads aligned with RMQTT webhook documentation
+export interface ConnectInfo {
+  node: number;
+  remoteAddr: string | null;
+  clientId: string;
+  username: string | null;
+  keepAlive: number;
+  protoVer: number;
+  cleanSession?: boolean; // MQTT 3.1/3.1.1
+  cleanStart?: boolean;   // MQTT 5.0
+}
+
+export interface ConnackInfo extends ConnectInfo {
+  connAck: string; // Broker outcome string, e.g., "Success", "BadUsernameOrPassword", "NotAuthorized"
+}

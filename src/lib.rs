@@ -155,6 +155,18 @@ impl MqttServerWrapper {
             if let Ok(Some(on_client_authenticate)) = hooks_obj.get_opt::<JsFunction, _, _>(&mut cx, "onClientAuthenticate") { callbacks.on_client_authenticate = Some(on_client_authenticate.root(&mut cx)); }
             if let Ok(Some(on_client_subscribe_authorize)) = hooks_obj.get_opt::<JsFunction, _, _>(&mut cx, "onClientSubscribeAuthorize") { callbacks.on_client_subscribe_authorize = Some(on_client_subscribe_authorize.root(&mut cx)); }
             if let Ok(Some(on_client_publish_authorize)) = hooks_obj.get_opt::<JsFunction, _, _>(&mut cx, "onClientPublishAuthorize") { callbacks.on_client_publish_authorize = Some(on_client_publish_authorize.root(&mut cx)); }
+            if let Ok(Some(on_message_delivered)) = hooks_obj.get_opt::<JsFunction, _, _>(&mut cx, "onMessageDelivered") { callbacks.on_message_delivered = Some(on_message_delivered.root(&mut cx)); }
+            if let Ok(Some(on_message_acked)) = hooks_obj.get_opt::<JsFunction, _, _>(&mut cx, "onMessageAcked") { callbacks.on_message_acked = Some(on_message_acked.root(&mut cx)); }
+            if let Ok(Some(on_message_dropped)) = hooks_obj.get_opt::<JsFunction, _, _>(&mut cx, "onMessageDropped") { callbacks.on_message_dropped = Some(on_message_dropped.root(&mut cx)); }
+            // Lifecycle hooks (optional) aligned to RMQTT
+            if let Ok(Some(on_client_connect)) = hooks_obj.get_opt::<JsFunction, _, _>(&mut cx, "onClientConnect") { callbacks.on_client_connect = Some(on_client_connect.root(&mut cx)); }
+            if let Ok(Some(on_client_connack)) = hooks_obj.get_opt::<JsFunction, _, _>(&mut cx, "onClientConnack") { callbacks.on_client_connack = Some(on_client_connack.root(&mut cx)); }
+            if let Ok(Some(on_client_connected)) = hooks_obj.get_opt::<JsFunction, _, _>(&mut cx, "onClientConnected") { callbacks.on_client_connected = Some(on_client_connected.root(&mut cx)); }
+            if let Ok(Some(on_client_disconnected)) = hooks_obj.get_opt::<JsFunction, _, _>(&mut cx, "onClientDisconnected") { callbacks.on_client_disconnected = Some(on_client_disconnected.root(&mut cx)); }
+            if let Ok(Some(on_session_created)) = hooks_obj.get_opt::<JsFunction, _, _>(&mut cx, "onSessionCreated") { callbacks.on_session_created = Some(on_session_created.root(&mut cx)); }
+            if let Ok(Some(on_session_subscribed)) = hooks_obj.get_opt::<JsFunction, _, _>(&mut cx, "onSessionSubscribed") { callbacks.on_session_subscribed = Some(on_session_subscribed.root(&mut cx)); }
+            if let Ok(Some(on_session_unsubscribed)) = hooks_obj.get_opt::<JsFunction, _, _>(&mut cx, "onSessionUnsubscribed") { callbacks.on_session_unsubscribed = Some(on_session_unsubscribed.root(&mut cx)); }
+            if let Ok(Some(on_session_terminated)) = hooks_obj.get_opt::<JsFunction, _, _>(&mut cx, "onSessionTerminated") { callbacks.on_session_terminated = Some(on_session_terminated.root(&mut cx)); }
         }
 
         Ok(cx.undefined())

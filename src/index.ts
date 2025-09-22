@@ -33,6 +33,8 @@ export type {
   SubscribeOptions,
   PublishOptions,
   MultiProtocolOptions,
+  ConnectInfo,
+  ConnackInfo,
 } from "./ts/api/types";
 
 // Default export for CommonJS consumers

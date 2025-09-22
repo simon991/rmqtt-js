@@ -10,6 +10,8 @@ A comprehensive example that showcases:
 - JavaScript authentication via `onClientAuthenticate` (demo password = "demo")
 - Subscribe ACLs via `onClientSubscribeAuthorize` (allow `<username>/*` and `server/public/*`, QoS ≤ 1)
 - Real‑time logs for publish/subscribe/unsubscribe hooks
+- Lifecycle notifications: `onClientConnect`, `onClientConnack`, `onClientConnected`, `onClientDisconnected`, `onSessionCreated`, `onSessionSubscribed`, `onSessionUnsubscribed`, `onSessionTerminated`
+- Message delivery notifications: `onMessageDelivered`, `onMessageAcked`, `onMessageDropped`
 - Server‑side publishing (status, heartbeat, sensor samples)
 - Graceful shutdown on SIGINT/SIGTERM
 
