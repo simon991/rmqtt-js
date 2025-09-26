@@ -1,6 +1,6 @@
 <div align="center">
 
- # rmqtt-server
+ # rmqtt-js
 
 Blazing‑fast, experimental MQTT broker for Node.js — powered by Rust RMQTT and Neon.
 
@@ -36,7 +36,7 @@ Blazing‑fast, experimental MQTT broker for Node.js — powered by Rust RMQTT a
 ## Install
 
  ```bash
- npm install rmqtt-server
+ npm install rmqtt-js
  ```
 
  This package ships prebuilt binaries for common platforms (linux-x64/arm64, darwin-x64/arm64, win32-x64). If a prebuild for your platform isn’t available, install will build from source:
@@ -55,7 +55,7 @@ npm run pack:check
 
 TypeScript
 ```ts
-import { MqttServer, QoS } from "rmqtt-server";
+import { MqttServer, QoS } from "rmqtt-js";
 
 const server = new MqttServer();
 
@@ -75,7 +75,7 @@ await server.publish("sensor/temperature", "23.7", { qos: QoS.AtLeastOnce });
 
 JavaScript (CommonJS)
 ```js
-const { MqttServer, QoS } = require("rmqtt-server");
+const { MqttServer, QoS } = require("rmqtt-js");
 
 (async () => {
   const server = new MqttServer();

@@ -260,7 +260,7 @@ async function pubSubExample() {
                     const processedData = {
                         ...data,
                         processed_at: new Date().toISOString(),
-                        processed_by: 'rmqtt-server'
+                        processed_by: 'rmqtt-js'
                     };
 
                     // Republish to processed topic

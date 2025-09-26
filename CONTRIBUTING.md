@@ -1,4 +1,4 @@
-# Contributing to rmqtt-server
+# Contributing to rmqtt-js
 
 Thanks for your interest in contributing! This project is a hybrid Rust + TypeScript Neon addon that exposes a high‑performance MQTT broker (RMQTT) to Node.js with a clean TS API. This guide explains how to set up your environment, build and test the project, and submit high‑quality changes.
 

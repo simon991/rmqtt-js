@@ -1,6 +1,6 @@
 # Examples
 
-This directory contains runnable examples demonstrating how to use the rmqtt-server library with real hooks, authentication, and publish/subscribe flows.
+This directory contains runnable examples demonstrating how to use the rmqtt-js library with real hooks, authentication, and publish/subscribe flows.
 
 ## simple-server.ts
 

@@ -1,5 +1,5 @@
 {
-  "name": "rmqtt-server",
+  "name": "rmqtt-js",
   "version": "0.1.0",
   "description": "High-performance MQTT server for Node.js built with Rust and Neon",
   "main": "dist/index.js",
