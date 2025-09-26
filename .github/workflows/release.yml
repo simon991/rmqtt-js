@@ -116,17 +116,38 @@ jobs:
         with:
           path: ./__prebuilds__
 
+      - name: Show downloaded artifact tree (debug)
+        shell: bash
+        run: |
+          echo "Downloaded artifact directory structure:" || true
+          find __prebuilds__ -maxdepth 4 -type f -print || true
+          echo "---"; ls -R __prebuilds__ || true
+
       - name: Merge prebuilds into package dir
         shell: bash
         run: |
+          set -euo pipefail
           mkdir -p prebuilds
-          shopt -s globstar nullglob
-          for d in __prebuilds__/**/prebuilds/*; do
-            if [ -d "$d" ]; then
-              cp -R "$d" prebuilds/
+          # Copy any platform-arch directories containing node.napi.node
+          found=0
+          while IFS= read -r -d '' file; do
+            dir=$(dirname "$file")
+            base=$(basename "$dir")
+            # Expect base like darwin-x64, linux-arm64, etc.
+            if [[ $base =~ ^(darwin|linux|win32)-(x64|arm64)$ ]]; then
+              echo "Copying prebuild directory $base"
+              cp -R "$dir" prebuilds/
+              found=$((found+1))
+            else
+              echo "Ignoring unexpected prebuild directory structure: $dir"
             fi
-          done
-          echo "Prebuilds merged:" && ls -R prebuilds || true
+          done < <(find __prebuilds__ -type f -name node.napi.node -print0)
+          if [ $found -eq 0 ]; then
+            echo "::error title=No prebuilds found in artifacts::Did not locate any node.napi.node files." >&2
+            exit 1
+          fi
+          echo "Merged $found prebuild directories into ./prebuilds"
+          ls -R prebuilds || true
 
       - name: Validate prebuild matrix completeness
         shell: bash
