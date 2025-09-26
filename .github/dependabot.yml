@@ -1,0 +1,147 @@
+version: 2
+
+# Dependabot configuration for hybrid TypeScript (npm) + Rust (cargo) + GitHub Actions project.
+# Goals:
+#  - Keep security patches fast (daily) while batching routine version bumps (weekly) to reduce PR noise.
+#  - Group related dev/test/type updates so they land together and lower CI overhead.
+#  - Keep core runtime / bridge crates more granular for clearer review (e.g. rmqtt, neon bridge ecosystem crates).
+#  - Limit simultaneous PRs while still ensuring steady dependency hygiene.
+
+updates:
+  # ----------------------------- NPM (TypeScript / Node) -----------------------------
+  - package-ecosystem: "npm"
+    directory: "/"          # Root where package.json lives
+    schedule:
+      interval: "weekly"     # Routine updates batched weekly to reduce churn
+      day: "monday"
+      time: "07:00"          # UTC; adjust if desired
+    open-pull-requests-limit: 10
+    versioning-strategy: increase        # Allow widening (e.g. ^1.2.3 -> ^1.4.0)
+    rebase-strategy: auto
+    commit-message:
+      prefix: "deps"
+      include: "scope"       # Adds dependency name
+    groups:
+      runtime-production:
+        applies-to: version-updates
+        dependency-type: production
+        update-types: ["minor", "patch"]
+      types-packages:
+        applies-to: version-updates
+        patterns:
+          - "@types/*"
+        update-types: ["minor", "patch"]
+      test-and-tooling:
+        applies-to: version-updates
+        patterns:
+          - "mocha"
+          - "chai"
+          - "ts-node"
+          - "typescript"
+        update-types: ["minor", "patch"]
+      major-runtime:
+        applies-to: version-updates
+        dependency-type: production
+        update-types: ["major"]
+      major-dev:
+        applies-to: version-updates
+        dependency-type: development
+        update-types: ["major"]
+    ignore:
+      # Example: delay potentially disruptive major updates until manual planning.
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "mocha"
+        update-types: ["version-update:semver-major"]
+
+  # Faster cadence just for SECURITY updates (npm). This is separate so security patches are not delayed.
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "daily"
+    allow:
+      - dependency-type: "all"
+    # Security updates are auto-labeled by GitHub; keep them separate & small.
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "deps-security"
+      include: "scope"
+
+  # ----------------------------- Cargo (Rust crates) -----------------------------
+  - package-ecosystem: "cargo"
+    directory: "/"          # Root where Cargo.toml lives
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "07:15"
+    open-pull-requests-limit: 10
+    versioning-strategy: increase
+    rebase-strategy: auto
+    commit-message:
+      prefix: "deps"
+      include: "scope"
+    groups:
+      rmqtt-core:
+        applies-to: version-updates
+        patterns:
+          - "rmqtt"
+      async-runtime:
+        applies-to: version-updates
+        patterns:
+          - "tokio"
+          - "async-trait"
+      neon-bridge-support:
+        applies-to: version-updates
+        patterns:
+          - "neon"
+          - "once_cell"
+      serialization:
+        applies-to: version-updates
+        patterns:
+          - "serde*"
+      patch-minor-bulk:
+        applies-to: version-updates
+        update-types: ["minor", "patch"]
+    ignore:
+      # Hold major bumps for manual review if they imply code changes.
+      - dependency-name: "tokio"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "rmqtt"
+        update-types: ["version-update:semver-major"]
+
+  # Daily security-only scan for cargo (separate from weekly routine updates)
+  - package-ecosystem: "cargo"
+    directory: "/"
+    schedule:
+      interval: "daily"
+    allow:
+      - dependency-type: "all"
+    commit-message:
+      prefix: "deps-security"
+      include: "scope"
+
+  # ----------------------------- GitHub Actions -----------------------------
+  - package-ecosystem: "github-actions"
+    directory: "/"          # Workflow files in .github/workflows
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "07:30"
+    open-pull-requests-limit: 5
+    rebase-strategy: auto
+    commit-message:
+      prefix: "ci"
+      include: "scope"
+    groups:
+      actions-minor-patch:
+        applies-to: version-updates
+        update-types: ["minor", "patch"]
+      actions-major:
+        applies-to: version-updates
+        update-types: ["major"]
+
+# Notes / future tuning:
+#  - Remove ignores for major versions once you are ready to migrate (or create separate branch workflows).
+#  - If PR noise is still high, consider consolidating cargo groups further or moving npm weekly interval to monthly.
+#  - If security posture requires faster cadence, set security update intervals to "live" (default) by omitting the schedule block.
+#  - Ensure required status checks handle batched grouped PRs (tests should still run once per grouped bump).
