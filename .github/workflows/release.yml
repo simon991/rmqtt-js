@@ -65,10 +65,31 @@ jobs:
       - name: Build native (release)
         run: npm run build:native:release
 
+      - name: Show binary size (stripped)
+        if: runner.os != 'Windows'
+        run: |
+          ls -lh dist/index.node || true
+          du -h dist/index.node || true
+        shell: bash
+
+      - name: Show binary size (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          if (Test-Path dist/index.node) {
+            Get-Item dist/index.node | Select-Object FullName,Length | Format-Table -AutoSize
+            $bytes = (Get-Item dist/index.node).Length
+            $kb = [Math]::Round($bytes / 1kb,2)
+            $mb = [Math]::Round($bytes / 1mb,2)
+            Write-Host "Size: $bytes bytes ($kb KB / $mb MB)"
+          } else { Write-Warning 'dist/index.node not found'; }
+
       - name: Create prebuild folder
         shell: bash
         run: |
           PREBUILD_PLATFORM=${{ matrix.os }} PREBUILD_ARCH=${{ matrix.arch }} node scripts/make-prebuild.js
+          test -f prebuilds/${{ matrix.os }}-${{ matrix.arch }}/node.napi.node || { echo 'Prebuild missing'; exit 1; }
+          ls -lh prebuilds/${{ matrix.os }}-${{ matrix.arch }}/node.napi.node
 
       - name: Upload prebuilds artifact
         uses: actions/upload-artifact@v4
@@ -106,6 +127,39 @@ jobs:
             fi
           done
           echo "Prebuilds merged:" && ls -R prebuilds || true
+
+      - name: Validate prebuild matrix completeness
+        shell: bash
+        run: |
+          set -euo pipefail
+          REQUIRED=("darwin-x64" "darwin-arm64" "linux-x64" "linux-arm64" "win32-x64")
+          echo "Validating required prebuild targets: ${REQUIRED[*]}"
+          missing=0
+          for target in "${REQUIRED[@]}"; do
+            path="prebuilds/$target/node.napi.node"
+            if [ ! -f "$path" ]; then
+              echo "::error title=Missing prebuild::$path is missing"
+              missing=1
+            else
+              size=$(du -h "$path" 2>/dev/null | cut -f1 || echo "?")
+              echo "Found $path (size $size)"
+            fi
+          done
+          # Detect unexpected extra targets (warn only)
+          echo "Scanning for unexpected targets..."
+          for dir in prebuilds/*; do
+            [ -d "$dir" ] || continue
+            base=$(basename "$dir")
+            case " ${REQUIRED[*]} " in
+              *" $base "*) ;; # expected
+              *) echo "::warning title=Unexpected prebuild target::Found extra prebuild directory $base" ;;
+            esac
+          done
+          if [ $missing -ne 0 ]; then
+            echo "One or more required prebuilds are missing. Failing release job." >&2
+            exit 1
+          fi
+          echo "All required prebuilds present."
 
       - name: Set up Rust toolchain
         uses: dtolnay/rust-toolchain@stable

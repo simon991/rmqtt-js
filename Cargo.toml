@@ -1,6 +1,6 @@
 [package]
 name = "rmqtt-js"
-version = "0.1.1"
+version = "0.1.2"
 description = "Neon MQTT Server Adapter"
 license = "MIT"
 edition = "2021"
@@ -16,3 +16,12 @@ tokio = { version = "1", features = ["full"] }
 async-trait = "0.1"
 once_cell = "1.0"
 serde_json = "1.0"
+
+[profile.release]
+# High-performance + reduced size balance
+opt-level = 3          # Maximum optimization for runtime speed
+lto = "thin"           # Thin LTO gives most benefits with lower compile cost
+codegen-units = 1      # Better cross-crate optimization (slower compile)
+panic = "unwind"       # Keep unwind so Neon can catch panics at boundary
+strip = "symbols"      # Cargo 1.70+: remove symbols (we also set RUSTFLAGS in CI, this makes it explicit)
+incremental = false    # Ensure fully optimized, reproducible artifacts

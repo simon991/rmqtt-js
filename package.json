@@ -1,6 +1,6 @@
 {
   "name": "rmqtt-js",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "High-performance MQTT server for Node.js built with Rust and Neon",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -20,7 +20,8 @@
     "install": "node scripts/install.js",
     "test": "npm run build:native:release && mocha --exit --require ts-node/register \"test/**/*.test.ts\"",
     "clean": "rm -rf dist",
-    "prepublishOnly": "npm run clean && npm run build:ts",
+    "prebuild:generate": "node scripts/make-prebuild.js",
+    "prepublishOnly": "npm run clean && npm run build:native:release && npm run build:ts && npm run prebuild:generate",
     "pack:check": "npm pack --dry-run",
     "example": "npm run build && node examples/simple-server.ts --experimental-strip-types"
   },
@@ -36,8 +37,9 @@
     "chai": "^6.0.1",
     "mocha": "^10.0.0",
     "mqtt": "^5.14.1",
-    "typescript": "^5.9.2",
-    "ts-node": "^10.9.2"
+    "rmqtt-js": "^0.1.1",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.9.2"
   },
   "repository": {
     "type": "git",

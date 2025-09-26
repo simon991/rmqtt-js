@@ -46,6 +46,10 @@ Blazing‑fast, experimental MQTT broker for Node.js — powered by Rust RMQTT a
    - Linux: `build-essential`, `pkg-config`
    - Windows: Visual Studio Build Tools (MSVC), Rustup default toolchain
 
+### Binary size note
+
+Release binaries published to npm are built in CI with Rust symbols stripped (`RUSTFLAGS="-C strip=symbols"`) to reduce package size. Local development builds (e.g. `npm run build`) are not stripped so that you retain full debug info when profiling or inspecting with tools like `lldb`.
+
 ## Quick start
 
 TypeScript
@@ -309,11 +313,9 @@ export interface HookCallbacks {
   onMessagePublish?(session: SessionInfo | null, from: MessageFrom, msg: MessageInfo): void;
   onClientSubscribe?(session: SessionInfo | null, sub: SubscriptionInfo): void;
   onClientUnsubscribe?(session: SessionInfo | null, unsub: UnsubscriptionInfo): void;
-  // New delivery hooks
   onMessageDelivered?(session: SessionInfo | null, from: MessageFrom, message: MessageInfo): void;
   onMessageAcked?(session: SessionInfo | null, from: MessageFrom, message: MessageInfo): void;
   onMessageDropped?(session: SessionInfo | null, from: MessageFrom | null, message: MessageInfo, info?: { reason?: string }): void;
-  // New lifecycle hooks
   onClientConnect?(info: ConnectInfo): void;
   onClientConnack?(info: ConnackInfo): void;
   onClientConnected?(session: SessionInfo): void;
