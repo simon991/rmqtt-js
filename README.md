@@ -46,11 +46,6 @@ Blazing‑fast, experimental MQTT broker for Node.js — powered by Rust RMQTT a
    - Linux: `build-essential`, `pkg-config`
    - Windows: Visual Studio Build Tools (MSVC), Rustup default toolchain
 
-To preview what would be published in a tarball, run:
-```bash
-npm run pack:check
-```
-
 ## Quick start
 
 TypeScript
@@ -118,6 +113,7 @@ server.setHooks({
     return { allow, superuser: false, reason: allow ? "ok" : "bad creds" };
   },
 });
+```
 
 Subscribe ACLs with QoS override
 ```ts

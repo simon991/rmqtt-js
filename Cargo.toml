@@ -1,6 +1,6 @@
 [package]
 name = "rmqtt-js"
-version = "0.1.0"
+version = "0.1.1"
 description = "Neon MQTT Server Adapter"
 license = "MIT"
 edition = "2021"
