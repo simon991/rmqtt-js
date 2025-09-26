@@ -5,6 +5,13 @@ on:
     tags:
       - 'v*.*.*'
 
+# Permissions: npm publish with --provenance requires an OIDC token.
+# Without `id-token: write` npm returns EUSAGE: "Provenance generation in GitHub Actions requires 'write' access to the 'id-token' permission".
+# We only need read access to repository contents plus id-token for signing.
+permissions:
+  contents: read
+  id-token: write
+
 jobs:
   prebuilds:
     strategy:
@@ -35,6 +42,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
+          cache: 'npm'
 
       - name: Set up Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -80,6 +88,7 @@ jobs:
         with:
           node-version: 20
           registry-url: 'https://registry.npmjs.org'
+          cache: 'npm'
 
       - name: Download all prebuild artifacts
         uses: actions/download-artifact@v4

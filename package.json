@@ -41,7 +41,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/splitbuddies/mqtt-pubsub-adapter.git"
+    "url": "git+https://github.com/simon991/rmqtt-js.git"
   },
   "keywords": [
     "mqtt",
@@ -56,9 +56,9 @@
   ],
   "author": "Simon Buchholz",
   "bugs": {
-    "url": "https://github.com/splitbuddies/mqtt-pubsub-adapter/issues"
+    "url": "https://github.com/simon991/rmqtt-js/issues"
   },
-  "homepage": "https://github.com/splitbuddies/mqtt-pubsub-adapter#readme",
+  "homepage": "https://github.com/simon991/rmqtt-js#readme",
   "engines": {
     "node": ">=14.0.0"
   },
