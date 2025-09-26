@@ -1,5 +1,15 @@
 import * as net from 'net';
 
+// On Windows, force exit after all tests to prevent hanging
+if (process.platform === 'win32') {
+  process.on('exit', () => {
+    // Give a small window for cleanup, then force exit
+    setTimeout(() => {
+      process.exit(0);
+    }, 1000).unref();
+  });
+}
+
 export async function waitForPort(host: string, port: number, timeoutMs: number = 5000, intervalMs: number = 50): Promise<void> {
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
