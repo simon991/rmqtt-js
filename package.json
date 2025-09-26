@@ -18,7 +18,7 @@
     "build:native:install": "cargo build --release --message-format=json-render-diagnostics && node scripts/copy-native.js",
     "build:ts": "tsc",
     "install": "node scripts/install.js",
-    "test": "npm run build:native:release && mocha --require ts-node/register \"test/**/*.test.ts\"",
+    "test": "npm run build:native:release && mocha --exit --require ts-node/register \"test/**/*.test.ts\"",
     "clean": "rm -rf dist",
     "prepublishOnly": "npm run clean && npm run build:ts",
     "pack:check": "npm pack --dry-run",

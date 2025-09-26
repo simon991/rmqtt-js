@@ -59,6 +59,8 @@ jobs:
       - name: Build (release + TS)
         run: npm run build
 
-      - name: Run tests
-        run: npm test
+      - name: Run tests (with cleanup debugging)
+        shell: bash
+        run: |
+          npm test
         timeout-minutes: 10

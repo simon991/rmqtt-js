@@ -10,7 +10,7 @@ if (process.platform === 'win32') {
   });
 }
 
-export async function waitForPort(host: string, port: number, timeoutMs: number = 5000, intervalMs: number = 50): Promise<void> {
+export async function waitForPort(host: string, port: number, timeoutMs: number = 8000, intervalMs: number = 50): Promise<void> {
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
     const listening = await isListening(host, port);
