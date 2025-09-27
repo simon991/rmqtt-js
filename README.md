@@ -4,7 +4,7 @@
 
 [![npm version](https://img.shields.io/npm/v/rmqtt-js.svg)](https://www.npmjs.com/package/rmqtt-js) [![CI](https://github.com/simon991/rmqtt-js/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/simon991/rmqtt-js/actions/workflows/ci.yml) [![npm downloads](https://img.shields.io/npm/dm/rmqtt-js.svg)](https://www.npmjs.com/package/rmqtt-js) [![license](https://img.shields.io/npm/l/rmqtt-js.svg)](./LICENSE)
 
-Blazing‑fast, experimental MQTT broker for Node.js — powered by Rust RMQTT and Neon.
+Blazing‑fast, experimental MQTT broker for Node.js — powered by [Rust RMQTT]([https://](https://github.com/rmqtt/rmqtt)) and [NEON]([https://](https://neon-rs.dev/)).
 
 </div>
 

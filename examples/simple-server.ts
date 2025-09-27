@@ -19,8 +19,7 @@
  *   npm run build && node dist/examples/simple-server.js
  */
 
-import * as MqttModule from '../dist/index.js';
-import type { ServerConfig } from '../dist/index.js';
+import * as MqttModule from 'rmqtt-js';
 
 const { MqttServer, QoS } = MqttModule;
 
@@ -75,7 +74,7 @@ async function main() {
         // Example 1: Basic TCP server with pub/sub functionality
         console.log('\n📡 Starting basic TCP MQTT server on port 1883...');
 
-        const basicConfig: ServerConfig = {
+        const basicConfig: MqttModule.ServerConfig = {
             listeners: [{
                 name: "tcp",
                 address: "0.0.0.0",
