@@ -83,16 +83,19 @@ Trust these instructions first. Only search the codebase or the web if the infor
 ## How to build, test, and run
 
 - Node: 18+ recommended (engines allow >=14). Rust toolchain required.
-- Build all (native + TS):
-  - `npm run build` (cleans, builds native via Cargo, then compiles TS to `dist/`)
+- Build all (release native + TS):
+  - `npm run build:release` (cleans, builds native via Cargo in release mode, then compiles TS to `dist/`)
+- Build all (debug native + TS):
+  - `npm run build:debug` (cleans, builds native in debug mode, then compiles TS to `dist/`)
 - Build native only:
-  - `npm run build:native` (produces `dist/index.node` via cargo-cp-artifact)
+  - `npm run build:native:release` (produces `dist/index.node` via cargo-cp-artifact)
+  - `npm run build:native:debug` (faster iteration build)
 - Build TS only:
   - `npm run build:ts` (compiles TS under `src/` to `dist/`)
 - Run tests:
-  - `npm test` (builds native, then runs Mocha on `test/**/*.test.ts` with ts-node)
+  - `npm test` (runs `build:native:debug`, then Mocha on `test/**/*.test.ts` with ts-node)
 - Example app:
-  - `npm run example` (build then run `examples/simple-server.ts`)
+  - `npm run example` (runs `build:release` then executes `examples/simple-server.ts`)
 
 Important runtime artifact paths:
 - Compiled JS: `dist/index.js`
@@ -204,7 +207,7 @@ When you add functionality, follow these patterns to keep the code coherent.
 
 ## Common pitfalls (avoid these)
 
-- Not building native before running TS that expects `dist/index.node`. Fix by running `npm run build` or `npm run build:native`.
+- Not building native before running TS that expects `dist/index.node`. Fix by running `npm run build:release` or `npm run build:native:debug`.
 - Changing `bridge.ts` loader paths without updating both candidates. Keep both paths in sync.
 - Missing `server.close()` after tests — can leave the process hanging.
 - Publishing before the server context is ready — the Rust side guards with `wait_for_ready(5000)`, but prefer to wait for port readiness in tests/flows.
@@ -220,7 +223,7 @@ When you add functionality, follow these patterns to keep the code coherent.
 ## Acceptance criteria & quality gates for Copilot-generated changes
 
 Before finishing a PR, Copilot should ensure:
-- Build: `npm run build` succeeds (native + TS).
+- Build: `npm run build:release` succeeds (native + TS).
 - Tests: `npm test` passes (Mocha, real ports, no hangs). Each new public behavior has tests.
 - Types: TS compiles strictly (no new errors). Public types updated where behavior changed.
 - Docs: README and examples updated for public API changes. Keep changelog-style notes in PR description.

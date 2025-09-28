@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning.
 
-## [0.1.3] - 2025-09-28
+## [0.1.4] - 2025-09-28
 
 ### Added
 - Comprehensive hook coverage test exercising authentication, ACL decisions, publish pipeline, delivery, and lifecycle callbacks.

@@ -16,7 +16,7 @@
  *   node examples/simple-server.ts --experimental-strip-types
  *   
  * Or compiled version:
- *   npm run build && node dist/examples/simple-server.js
+ *   npm run build:release && node dist/examples/simple-server.js
  */
 
 import * as MqttModule from 'rmqtt-js';

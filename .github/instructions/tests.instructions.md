@@ -18,7 +18,7 @@ Follow these rules to keep the suite fast, reliable, and aligned with our runtim
   - Avoid arbitrary `setTimeout` waits. Use `waitForPort` for server readiness and library callbacks/events.
 
 - Build assumptions
-  - The test script runs `npm run build:native` automatically. If running a single test manually, ensure `dist/index.node` exists.
+  - The test script runs `npm run build:native:debug` automatically. If running a single test manually, ensure `dist/index.node` exists.
   - Do not mutate `src/ts/native/bridge.ts` loader paths; tests rely on the dual-candidate loading mechanism.
 
 - MQTT client flows

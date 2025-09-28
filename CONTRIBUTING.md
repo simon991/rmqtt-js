@@ -31,7 +31,7 @@ Useful scripts:
 
 ```bash
 # Build native addon (dist/index.node) + compile TS to dist/
-npm run build
+npm run build:release
 
 # Build native addon only (release build and copy to dist/)
 npm run build:native:release
@@ -40,12 +40,12 @@ npm run build:native:release
 npm run build:ts
 
 # Clean dist/
-npm run clean
+npm run clean:all
 ```
 
 ### Binary size note
 
-Release binaries published to npm are built in CI with Rust symbols stripped (`RUSTFLAGS="-C strip=symbols"`) to reduce package size. Local development builds (e.g. `npm run build`) are not stripped so that you retain full debug info when profiling or inspecting with tools like `lldb`.
+Release binaries published to npm are built in CI with Rust symbols stripped (`RUSTFLAGS="-C strip=symbols"`) to reduce package size. Local development builds (e.g. `npm run build:release` or `npm run build:debug`) are not stripped so that you retain full debug info when profiling or inspecting with tools like `lldb`.
 
 ## Run tests
 
@@ -167,7 +167,7 @@ Tests:
 
 1. Create a feature branch.
 2. Ensure everything builds locally:
-  - `npm run build`
+  - `npm run build:release`
   - `npm test`
 3. Include tests for new behavior and update docs (README, examples) if the public API changes.
 4. Keep PRs focused with minimal, localized diffs.
@@ -181,7 +181,7 @@ Tests:
 ## Troubleshooting
 
 - Native build fails: ensure Rust toolchain is installed and platform build tools are available.
-- “Failed to load native addon” at runtime: run `npm run build` to produce `dist/index.node` and ensure `bridge.ts` loader paths remain unchanged.
+- “Failed to load native addon” at runtime: run `npm run build:release` to produce `dist/index.node` and ensure `bridge.ts` loader paths remain unchanged.
 - Publish errors: ensure the server is running; the TS API rejects `publish()` when not running.
 
 ## License & conduct

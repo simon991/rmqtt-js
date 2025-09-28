@@ -25,7 +25,7 @@ npm run example
 node examples/simple-server.ts --experimental-strip-types
 
 # Compiled
-npm run build && node dist/examples/simple-server.js
+npm run build:release && node dist/examples/simple-server.js
 ```
 
 ### Try it with mosquitto
