@@ -14,11 +14,11 @@
   "sideEffects": false,
   "scripts": {
     "build": "npm run clean && npm run build:native:release && npm run build:ts",
+    "build:native": "cargo build --message-format=json-render-diagnostics && node scripts/copy-native.js",
     "build:native:release": "cargo build --release --message-format=json-render-diagnostics && node scripts/copy-native.js",
-    "build:native:install": "cargo build --release --message-format=json-render-diagnostics && node scripts/copy-native.js",
     "build:ts": "tsc",
     "install": "node scripts/install.js",
-    "test": "npm run build:native:release && mocha --exit --require ts-node/register \"test/**/*.test.ts\"",
+    "test": "npm run build:native && mocha --exit --require ts-node/register \"test/**/*.test.ts\"",
     "clean": "rm -rf dist",
     "prebuild:generate": "node scripts/make-prebuild.js",
     "prepublishOnly": "npm run clean && npm run build:native:release && npm run build:ts && npm run prebuild:generate",

@@ -25,15 +25,21 @@ function getLibFilename(crateName) {
 function main() {
     const crateName = readCrateName();
     const libFile = getLibFilename(crateName);
-    const from = path.join(__dirname, '..', 'target', 'release', libFile);
+    const targetRoot = path.join(__dirname, '..', 'target');
+    const searchOrder = [
+        { profile: 'release', file: path.join(targetRoot, 'release', libFile) },
+        { profile: 'debug', file: path.join(targetRoot, 'debug', libFile) },
+    ];
+    const found = searchOrder.find(candidate => fs.existsSync(candidate.file));
+    if (!found) {
+        const attempted = searchOrder.map(c => c.file).join(', ');
+        throw new Error(`Native artifact not found. Looked for: ${attempted}`);
+    }
     const toDir = path.join(__dirname, '..', 'dist');
     const to = path.join(toDir, 'index.node');
-    if (!fs.existsSync(from)) {
-        throw new Error(`Native artifact not found: ${from}`);
-    }
     fs.mkdirSync(toDir, { recursive: true });
-    fs.copyFileSync(from, to);
-    console.log(`Copied native module to ${to}`);
+    fs.copyFileSync(found.file, to);
+    console.log(`Copied native module (${found.profile}) to ${to}`);
 }
 
 main();
