@@ -43,6 +43,10 @@ npm run build:ts
 npm run clean
 ```
 
+### Binary size note
+
+Release binaries published to npm are built in CI with Rust symbols stripped (`RUSTFLAGS="-C strip=symbols"`) to reduce package size. Local development builds (e.g. `npm run build`) are not stripped so that you retain full debug info when profiling or inspecting with tools like `lldb`.
+
 ## Run tests
 
 The suite uses Mocha and runs against real TCP ports:

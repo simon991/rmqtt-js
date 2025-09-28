@@ -1,58 +1,86 @@
 <div align="center">
 
- # rmqtt-js
+# rmqtt-js
 
 [![npm version](https://img.shields.io/npm/v/rmqtt-js.svg)](https://www.npmjs.com/package/rmqtt-js) [![CI](https://github.com/simon991/rmqtt-js/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/simon991/rmqtt-js/actions/workflows/ci.yml) [![npm downloads](https://img.shields.io/npm/dm/rmqtt-js.svg)](https://www.npmjs.com/package/rmqtt-js) [![license](https://img.shields.io/npm/l/rmqtt-js.svg)](./LICENSE)
 
-Blazing‑fast, experimental MQTT broker for Node.js — powered by [Rust RMQTT]([https://](https://github.com/rmqtt/rmqtt)) and [NEON]([https://](https://neon-rs.dev/)).
+<p align="center">
+  <strong>Experimental MQTT broker for Node.js,<br/>powered by Rust RMQTT + Neon.</strong>
+</p>
+
+<p align="center">
+  <code>Ultra-low latency · Hook-aware · Multi-protocol</code>
+</p>
 
 </div>
 
-## Table of contents
+---
 
-- Highlights
-- Install
-- Quick start
-- Powerful hooks
-- Configuration
-- Pub/Sub API
-- Example app
-- Client cheat sheet
-- TypeScript types
-- Architecture (how it works)
-- Testing
-- Troubleshooting
-- License
+## 📚 Table of contents
 
-## Highlights
+- [rmqtt-js](#rmqtt-js)
+  - [📚 Table of contents](#-table-of-contents)
+  - [✨ Highlights](#-highlights)
+  - [📦 Install](#-install)
+  - [⚡️ Quick start](#️-quick-start)
+  - [🪝 Powerful hooks](#-powerful-hooks)
+    - [Hooks overview](#hooks-overview)
+  - [⚙️ Configuration](#️-configuration)
+  - [📡 Pub/Sub API](#-pubsub-api)
+  - [🧪 Example app](#-example-app)
+  - [🧾 TypeScript types](#-typescript-types)
+  - [🏗️ Architecture (how it works)](#️-architecture-how-it-works)
+  - [✅ Testing](#-testing)
+  - [🛠️ Troubleshooting](#️-troubleshooting)
+  - [🔐 Security best practices](#-security-best-practices)
+  - [🗓️ Changelog](#️-changelog)
+  - [📄 License](#-license)
 
-- High performance core: Built on Rust + Tokio with the battle‑tested RMQTT engine
-- First‑class TypeScript API: Clean, promise‑based API with strong types
-- Multi‑protocol listeners: TCP, TLS, WebSocket, and WSS — run them all at once
-- Real‑time hooks: Observe publish/subscribe/unsubscribe events in JavaScript
-- Pluggable auth: Implement authentication in JavaScript with a simple callback
-- Subscribe ACLs: Allow/deny subscriptions in JS and optionally override granted QoS
-- Full QoS and retention: QoS 0/1/2 and retained messages supported end‑to‑end
-- Minimal, actionable logs: Only WARN/ERROR logs for user‑significant issues
+---
 
-## Install
+## ✨ Highlights
 
- ```bash
- npm install rmqtt-js
- ```
+<table>
+  <tr>
+    <td><strong>⚡️ High performance core</strong><br/>Built on Rust + the battle-tested RMQTT engine.</td>
+    <td><strong>🧠 TypeScript-first API</strong><br/>Clean, promise-based ergonomics with strict typing.</td>
+  </tr>
+  <tr>
+    <td><strong>🌐 Multi-protocol listeners</strong><br/>Run TCP, TLS, WebSocket, and WSS concurrently.</td>
+    <td><strong>🔌 Hook-driven extensibility</strong><br/>Real-time auth, ACL, and lifecycle callbacks.</td>
+  </tr>
+  <tr>
+    <td><strong>📦 Full QoS & retention</strong><br/>QoS 0/1/2 plus retained-message support end-to-end.</td>
+    <td><strong>🛡️ Production-ready controls</strong><br/>Pluggable auth and subscribe QoS overrides.</td>
+  </tr>
+</table>
 
- This package ships prebuilt binaries for common platforms (linux-x64/arm64, darwin-x64/arm64, win32-x64). If a prebuild for your platform isn’t available, install will build from source:
+> [!IMPORTANT]
+> Designed for teams that demand predictable latency, graceful restarts, and deep observability hooks.
+
+---
+
+## 📦 Install
+```bash
+npm install rmqtt-js
+```
+
+> [!NOTE]
+> Ships with prebuilt binaries for Linux, macOS, and Windows; falls back to source builds when needed.
+
+This package ships prebuilt binaries for common platforms (linux-x64/arm64, darwin-x64/arm64, win32-x64). If a prebuild for your platform isn’t available, install will build from source:
  - Node.js 18+ recommended (engines allow >=14)
  - Rust toolchain is required when building from source
    - macOS: Xcode Command Line Tools (`xcode-select --install`)
    - Linux: `build-essential`, `pkg-config`
    - Windows: Visual Studio Build Tools (MSVC), Rustup default toolchain
 
-### Binary size note
+---
 
-Release binaries published to npm are built in CI with Rust symbols stripped (`RUSTFLAGS="-C strip=symbols"`) to reduce package size. Local development builds (e.g. `npm run build`) are not stripped so that you retain full debug info when profiling or inspecting with tools like `lldb`.
+## ⚡️ Quick start
 
-## Quick start
+> [!TIP]
+> Combine `rmqtt-js` with your favorite MQTT client or cloud infrastructure for instant telemetry pipelines.
 
 TypeScript
 ```ts
@@ -85,7 +113,9 @@ const { MqttServer, QoS } = require("rmqtt-js");
 })();
 ```
 
-## Powerful hooks
+---
+
+## 🪝 Powerful hooks
 
 Listen to broker events in real time — only invoked if you register them.
 
@@ -130,8 +160,10 @@ server.setHooks({
     return allowed ? { allow: true, qos: 1 } : { allow: false, reason: "not authorized" };
   },
 });
+```
 
 Promise-based Subscribe ACL
+```ts
 server.setHooks({
   onClientSubscribeAuthorize: async (session, sub) => {
     // e.g., async lookup against a policy service
@@ -212,7 +244,9 @@ Hook semantics:
 - Subscribe ACL timeouts or callback errors → deny with WARN
  - Publish hook: invalid mutation fields (e.g., qos not 0/1/2 or topic with wildcards +/#) are ignored and the original values are used; a WARN is logged.
 
-## Configuration
+---
+
+## ⚙️ Configuration
 
 Quick helpers
 ```ts
@@ -251,7 +285,9 @@ interface ServerConfig {
 }
 ```
 
-## Pub/Sub API
+---
+
+## 📡 Pub/Sub API
 
 ```ts
 await server.publish(topic: string, payload: string | Buffer, options?: {
@@ -265,7 +301,9 @@ Notes:
 - QoS values are validated; invalid values are rejected with an ERROR log.
 - Payloads are sent as bytes; strings are encoded as UTF‑8.
 
-## Example app
+---
+
+## 🧪 Example app
 
 This repo ships with a comprehensive example showing auth, ACLs, and server‑side publishing.
 
@@ -285,7 +323,9 @@ The full source lives in `examples/simple-server.ts`.
 
 See also: `examples/CHEATSHEET.md` for quick mqtt.js and Python client snippets (TCP/WS/TLS/WSS).
 
-## TypeScript types
+---
+
+## 🧾 TypeScript types
 
 ```ts
 export enum QoS { AtMostOnce = 0, AtLeastOnce = 1, ExactlyOnce = 2 }
@@ -348,7 +388,9 @@ export interface ConnackInfo extends ConnectInfo {
 Implementation notes:
 - MessageFrom is a best-effort attribution based on RMQTT origin. When the origin is a client, future versions may populate `clientId` and `username` more precisely. If multi-node is planned, threading the real node id into `SessionInfo`/`MessageFrom` early will avoid downstream assumptions.
 
-## Architecture (how it works)
+---
+
+## 🏗️ Architecture (how it works)
 
 - Rust core runs RMQTT on a dedicated Tokio runtime thread, separate from Node’s event loop
 - Neon bridges expose a minimal, typed API to Node.js
@@ -357,7 +399,9 @@ Implementation notes:
 - Safety valves: 5s timeouts for JS decisions (auth/subscribe ACL). Timeout or channel error → deny with WARN
 - Resource lifecycle: start/stop/close are graceful; a small shared state waits for server readiness before publishing
 
-## Testing
+---
+
+## ✅ Testing
 
 ```bash
 npm test
@@ -369,7 +413,18 @@ What the suite covers:
 - Publish path and client round‑trips using a real MQTT client
 - Robust readiness using event‑driven port checks (no arbitrary sleeps)
 
-## Security best practices
+---
+
+## 🛠️ Troubleshooting
+
+- ERROR: Attempted to publish while server is not running → Call `start()` before `publish()`
+- ERROR: Invalid configuration → Ensure at least one listener; TLS/WSS require both `tlsCert` and `tlsKey`
+- WARN: Hook timeout/channel error → Your JS hook may be slow or threw; decisions fall back to deny
+- Native build fails during install → Ensure Rust toolchain and platform build tools are available
+
+---
+
+## 🔐 Security best practices
 
 - Always enable TLS in production (tls/wss) and use strong certificates
   - Generate or provision certs from a trusted CA; rotate regularly
@@ -382,17 +437,14 @@ What the suite covers:
 - Log only WARN/ERROR and avoid sensitive data in logs
 - Keep Node and Rust dependencies up to date; rebuild native module on updates
 
-## Troubleshooting
+---
 
-- ERROR: Attempted to publish while server is not running → Call `start()` before `publish()`
-- ERROR: Invalid configuration → Ensure at least one listener; TLS/WSS require both `tlsCert` and `tlsKey`
-- WARN: Hook timeout/channel error → Your JS hook may be slow or threw; decisions fall back to deny
-- Native build fails during install → Ensure Rust toolchain and platform build tools are available
-
-## Changelog
+## 🗓️ Changelog
 
 See `CHANGELOG.md` for release notes.
 
-## License
+---
+
+## 📄 License
 
 MIT
