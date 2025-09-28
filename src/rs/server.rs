@@ -336,11 +336,11 @@ impl MqttServerWrapper {
                 Box::new(JavaScriptHookHandler::new()),
             )
             .await;
-        // Register SessionUnsubscribed when available
         #[allow(unused_must_use)]
         {
-            // If this Type exists in this rmqtt version, the following line compiles; otherwise, keep it commented out or feature-gated.
-            // hook_register.add(Type::SessionUnsubscribed, Box::new(JavaScriptHookHandler::new())).await;
+            hook_register
+                .add(Type::SessionUnsubscribed, Box::new(JavaScriptHookHandler::new()))
+                .await;
         }
         hook_register
             .add(

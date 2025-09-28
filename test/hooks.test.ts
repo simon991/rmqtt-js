@@ -159,4 +159,96 @@ describe('MQTT Server Hook Callbacks', () => {
 
         expect(server.running).to.be.true;
     });
+
+    it('onMessagePublish should include publishing client identity', async function () {
+        this.timeout(10000);
+
+        const topic = 'test/hooks/identity';
+        const payload = 'client-identity';
+        const clientId = `client-${Date.now()}`;
+        const username = `user-${Date.now()}`;
+        let capturedSession: SessionInfo | null = null;
+        let capturedFrom: MessageFrom | null = null;
+
+        let resolveHook: (() => void) | null = null;
+        const hookObserved = new Promise<void>((resolve) => {
+            resolveHook = resolve;
+        });
+
+        server.setHooks({
+            onMessagePublish: (session, from, message) => {
+                if (message.topic === topic && message.payload.toString() === payload) {
+                    capturedSession = session;
+                    capturedFrom = from;
+                    resolveHook?.();
+                }
+            }
+        });
+
+        currentPort = nextPort();
+
+        await server.start({
+            listeners: [{
+                name: 'tcp-publish-identity',
+                address: '127.0.0.1',
+                port: currentPort,
+                protocol: 'tcp',
+                allowAnonymous: true
+            }]
+        });
+
+        await waitForPort('127.0.0.1', currentPort);
+
+        const client = connect(`mqtt://127.0.0.1:${currentPort}`, {
+            clientId,
+            username
+        });
+
+        try {
+            await new Promise<void>((resolve, reject) => {
+                const timer = setTimeout(() => reject(new Error('client connect timeout')), 4000);
+                client.once('connect', () => {
+                    clearTimeout(timer);
+                    resolve();
+                });
+                client.once('error', (err) => {
+                    clearTimeout(timer);
+                    reject(err);
+                });
+            });
+
+            await new Promise<void>((resolve, reject) => {
+                client.publish(topic, payload, { qos: 0 }, (err?: Error) => {
+                    if (err) {
+                        reject(err);
+                        return;
+                    }
+                    resolve();
+                });
+            });
+
+            await Promise.race([
+                hookObserved,
+                new Promise<void>((_, reject) => setTimeout(() => reject(new Error('onMessagePublish hook not observed')), 5000))
+            ]);
+        } finally {
+            await new Promise<void>((resolve, reject) => {
+                client.end(false, {}, (err?: Error) => {
+                    if (err) {
+                        reject(err);
+                    } else {
+                        resolve();
+                    }
+                });
+            });
+        }
+
+        expect(capturedSession, 'session info should be provided for client publishes').to.not.equal(null);
+        expect(capturedSession!.clientId).to.equal(clientId);
+        expect(capturedSession!.username).to.equal(username);
+        expect(capturedFrom, 'message origin should be provided').to.not.equal(null);
+        expect(capturedFrom!.clientId).to.equal(clientId);
+        expect(capturedFrom!.username).to.equal(username);
+        expect(capturedFrom!.type).to.not.equal('system');
+    });
 });

@@ -122,6 +122,7 @@ This roadmap prioritizes features and improvements of this MQTT server (Neon + R
 - Status: Implemented and tested: `onClientConnect`, `onClientConnack`, `onClientConnected`, `onClientDisconnected`, plus session lifecycle (`onSessionCreated`, `onSessionSubscribed`, `onSessionUnsubscribed`, `onSessionTerminated`) and message delivery lifecycle (`onMessageDelivered`, `onMessageAcked`, `onMessageDropped`).
 - Follow-ups:
   - Populate `MessageFrom.clientId/username` when origin is a client (enhanced attribution).
+  - Enrich `MessageFrom.type` with more granular variants that mirror RMQTT origins (e.g., admin, bridge, last-will) so hook consumers can distinguish automated publishers from real clients without extra heuristics.
   - Thread real `node` id into `SessionInfo`/`MessageFrom` when clustering/multi-node is enabled (currently placeholder `1`).
 
 1)  Pluggable JS plugin system (nice-to-have)

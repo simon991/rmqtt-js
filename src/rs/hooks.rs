@@ -8,7 +8,7 @@ use neon::{event::Channel, prelude::*, types::buffer::TypedArray};
 use once_cell::sync::Lazy;
 use rmqtt::{
     hook::{Handler, HookResult, Parameter, ReturnType},
-    types::QoS as RmQos,
+    types::{FromType, QoS as RmQos},
 };
 use tokio::sync::oneshot;
 
@@ -496,30 +496,109 @@ impl JavaScriptHookHandler {
 
     // Removed legacy connected emission from ConnectInfo; now using official lifecycle hooks
 
-    fn emit_on_message_publish(&self, publish: &rmqtt::types::Publish) {
+    fn emit_on_message_publish(
+        &self,
+        session_opt: Option<&rmqtt::session::Session>,
+        from: &rmqtt::types::From,
+        publish: &rmqtt::types::Publish,
+    ) {
         if let Ok(callbacks) = HOOK_CALLBACKS.lock() {
             if callbacks.on_message_publish.is_none() { return; }
             let channel = callbacks.channel.clone();
             if channel.is_none() { return; }
-            // Clone data for 'static closure
+
+            // Snapshot data needed for JS invocation
             let topic = publish.topic.to_string();
             let payload = publish.payload.to_vec();
             let qos = publish.qos as u8;
             let retain = publish.retain;
             let dup = publish.dup;
             let create_time = publish.create_time.unwrap_or(0);
+
+            let session_snapshot = session_opt.map(|session| {
+                let id = session.id();
+                (
+                    id.node(),
+                    id.client_id.to_string(),
+                    session.username().map(|u| u.to_string()),
+                    id.remote_addr.as_ref().map(|addr| addr.to_string()),
+                )
+            });
+
+            let from_snapshot = (
+                match from.typ() {
+                    FromType::Custom => "client".to_string(),
+                    other => other.as_str().to_string(),
+                },
+                from.node(),
+                from.client_id.to_string(),
+                from.username.as_ref().map(|u| u.to_string()),
+                from.remote_addr.as_ref().map(|addr| addr.to_string()),
+            );
+
             if let Some(channel) = channel {
                 let _ = channel.try_send(move |mut cx| {
                     if let Ok(callbacks) = HOOK_CALLBACKS.lock() {
                         if let Some(cb_root) = &callbacks.on_message_publish {
                             let cb = cb_root.to_inner(&mut cx);
-                            let session = cx.null();
-                            let from = cx.empty_object();
-                            // keep type casing consistent with TS: "system"
-                            let js_from_type = cx.string("system");
-                            from.set(&mut cx, "type", js_from_type)?;
+
+                            // Session info (or null when unavailable)
+                            let session_val: Handle<JsValue> = if let Some((node, client_id, username, remote_addr)) = session_snapshot.as_ref() {
+                                let session_obj = cx.empty_object();
+                                let node_js = cx.number(*node as f64);
+                                let client_js = cx.string(client_id.as_str());
+                                session_obj.set(&mut cx, "node", node_js).ok();
+                                session_obj.set(&mut cx, "clientId", client_js).ok();
+                                let username_js: Handle<JsValue> = match username {
+                                    Some(u) => {
+                                        let val = cx.string(u.as_str());
+                                        val.upcast()
+                                    }
+                                    None => cx.null().upcast(),
+                                };
+                                let remote_js: Handle<JsValue> = match remote_addr {
+                                    Some(r) => {
+                                        let val = cx.string(r.as_str());
+                                        val.upcast()
+                                    }
+                                    None => cx.null().upcast(),
+                                };
+                                session_obj.set(&mut cx, "username", username_js).ok();
+                                session_obj.set(&mut cx, "remoteAddr", remote_js).ok();
+                                session_obj.upcast()
+                            } else {
+                                cx.null().upcast()
+                            };
+
+                            // Message origin details
+                            let from_obj = cx.empty_object();
+                            let (from_type, from_node, from_client_id, from_username, from_remote) = &from_snapshot;
+                            let from_type_js = cx.string(from_type.as_str());
+                            let from_node_js = cx.number(*from_node as f64);
+                            let from_client_js = cx.string(from_client_id.as_str());
+                            from_obj.set(&mut cx, "type", from_type_js).ok();
+                            from_obj.set(&mut cx, "node", from_node_js).ok();
+                            from_obj.set(&mut cx, "clientId", from_client_js).ok();
+                            let from_username_js: Handle<JsValue> = match from_username {
+                                Some(u) => {
+                                    let val = cx.string(u.as_str());
+                                    val.upcast()
+                                }
+                                None => cx.null().upcast(),
+                            };
+                            let from_remote_js: Handle<JsValue> = match from_remote {
+                                Some(r) => {
+                                    let val = cx.string(r.as_str());
+                                    val.upcast()
+                                }
+                                None => cx.null().upcast(),
+                            };
+                            from_obj.set(&mut cx, "username", from_username_js).ok();
+                            from_obj.set(&mut cx, "remoteAddr", from_remote_js).ok();
+
+                            // Message payload snapshot
                             let message = cx.empty_object();
-                            let js_topic = cx.string(topic);
+                            let js_topic = cx.string(topic.as_str());
                             let mut js_payload = cx.buffer(payload.len())?;
                             js_payload.as_mut_slice(&mut cx).copy_from_slice(&payload);
                             let js_qos = cx.number(qos as f64);
@@ -532,7 +611,13 @@ impl JavaScriptHookHandler {
                             message.set(&mut cx, "retain", js_retain)?;
                             message.set(&mut cx, "dup", js_dup)?;
                             message.set(&mut cx, "createTime", js_ct)?;
-                            let _ = cb.call_with(&cx).arg(session).arg(from).arg(message).apply::<JsUndefined, _>(&mut cx);
+
+                            let _ = cb
+                                .call_with(&cx)
+                                .arg(session_val)
+                                .arg(from_obj)
+                                .arg(message)
+                                .apply::<JsUndefined, _>(&mut cx);
                         }
                     }
                     Ok(())
@@ -1081,8 +1166,9 @@ impl Handler for JavaScriptHookHandler {
                     }
                 }
             }
-            Parameter::MessagePublish(session_opt, _from, publish) => {
-                self.emit_on_message_publish(publish);
+            Parameter::MessagePublish(session_opt, from, publish) => {
+                let session_ref = session_opt.as_ref().copied();
+                self.emit_on_message_publish(session_ref, from, publish);
                 // Apply cached mutation, if any
                 let key = make_publish_key(publish);
                 if let Ok(mut map) = PUBLISH_DECISIONS.lock() {
